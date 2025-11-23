@@ -1,11 +1,11 @@
 camera_url: "http://192.168.10.153/webcam/?action=snapshot"
 
-check_interval: 5          # seconds between checks
-failure_threshold: 5000    # pixel difference threshold
-consecutive_failures: 3    # require failure for N checks in a row
+moonraker_url: "http://127.0.0.1:7125"
 
-on_failure: "pause"        # "pause" or "cancel"
+check_interval: 5
+consecutive_failures: 3
+on_failure: "pause"
 
-moonraker_url: "http://127.0.0.1:7125"  # Moonraker local API
+ssim_threshold: 0.97   # try 0.97–0.99. Lower = less sensitive
 
 log_path: "/tmp/klipper-pfd.log"
