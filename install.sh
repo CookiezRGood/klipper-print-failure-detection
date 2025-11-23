@@ -8,33 +8,43 @@ if [ "$(id -u)" != "0" ]; then
     exit 1
 fi
 
-# Step 2: Activate the Klipper virtual environment
-# Assuming you have your virtual environment set up at /home/pi/klipper-env
-KLIPPER_ENV_PATH="/home/pi/klipper-env"
-if [ ! -d "$KLIPPER_ENV_PATH" ]; then
-    echo "Klipper virtual environment not found. Please check your installation."
-    exit 1
+# Step 2: Make sure this script is executable, if not, set the correct permissions
+if [ ! -x "$0" ]; then
+    echo "Making the install script executable..."
+    chmod +x "$0"
 fi
 
+# Step 3: Check if the Klipper virtual environment exists, if not, create it
+KLIPPER_ENV_PATH="/home/pi/klipper-env"
+if [ ! -d "$KLIPPER_ENV_PATH" ]; then
+    echo "Klipper virtual environment not found. Creating the virtual environment..."
+    
+    # Install Python 3 and virtualenv if not installed
+    sudo apt-get update
+    sudo apt-get install -y python3-venv python3-pip
+
+    # Create the virtual environment
+    python3 -m venv $KLIPPER_ENV_PATH
+    echo "Virtual environment created at $KLIPPER_ENV_PATH"
+fi
+
+# Step 4: Activate the Klipper virtual environment
 source $KLIPPER_ENV_PATH/bin/activate
 
-# Step 3: Install necessary Python dependencies
-echo "Installing dependencies..."
-
-# Install dependencies for the plugin
+# Step 5: Install necessary Python dependencies
+echo "Installing Python dependencies..."
 pip install --upgrade pip  # Ensure pip is up to date
 pip install -r requirements.txt  # Install dependencies listed in requirements.txt
 
-# Step 4: Install system dependencies if required (e.g., OpenCV)
+# Step 6: Install system dependencies (OpenCV for image processing)
 echo "Installing system dependencies..."
-sudo apt-get update
 sudo apt-get install -y libopencv-dev  # OpenCV library for image processing
 
-# Step 5: Ensure proper permissions on the plugin files
+# Step 7: Ensure proper permissions on the plugin files
 echo "Setting up file permissions..."
 chmod +x /home/pi/klipper-plugins/klipper-print-failure-detection/*.py  # Make Python files executable
 
-# Step 6: Finish the installation
+# Step 8: Finish the installation
 echo "Installation complete! You can now run the plugin."
 
 # Deactivate the virtual environment
