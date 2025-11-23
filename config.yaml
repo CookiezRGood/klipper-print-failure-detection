@@ -1,4 +1,4 @@
-camera_ip: "http://192.168.10.153/webcam/?action=stream"  # Replace with the actual camera IP
+camera_ip: "http://192.168.10.153/webcam/?action=snapshot"  # Replace with the actual camera IP
 failure_threshold: 5000  # Number of pixels that need to change to trigger failure
 capture_delay: 5  # Delay in seconds between two frame captures
 pause_on_failure: true  # Set to true to pause the print if failure is detected
