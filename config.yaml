@@ -1,11 +1,17 @@
-camera_url: "http://192.168.10.153/webcam/?action=snapshot"
-
+camera_url: "http://192.168.10.153/webcam2/?action=snapshot"
 moonraker_url: "http://127.0.0.1:7125"
 
 check_interval: 5
 consecutive_failures: 3
 on_failure: "pause"
 
-ssim_threshold: 0.97   # try 0.97–0.99. Lower = less sensitive
+# SSIM threshold for detection
+ssim_threshold: 0.97
+
+mask:
+  top: 120
+  bottom: 0
+  left: 0
+  right: 0
 
 log_path: "/tmp/klipper-pfd.log"
