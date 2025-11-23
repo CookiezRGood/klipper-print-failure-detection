@@ -1,92 +1,166 @@
-import cv2
 import aiohttp
 import asyncio
-import time
-import yaml
+import cv2
 import numpy as np
+import yaml
+import time
+import logging
+from pathlib import Path
 
-class MJPEG:
-    def __init__(self, camera_ip: str):
-        self.camera_ip = camera_ip
-    
-    async def snap(self) -> bytes:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.camera_ip, timeout=aiohttp.ClientTimeout(total=5.0)) as response:
-                if response.status == 200:
-                    return await response.read()
-        return None
+# ------------------------------------------------------------
+# Load configuration
+# ------------------------------------------------------------
 
-def detect_movement_background_subtraction(image1, image2, threshold=5000):
-    """
-    Detects movement between two images using background subtraction.
-    If the number of changed pixels exceeds the threshold, it returns True (indicating failure).
+def load_config():
+    with open("config.yaml", "r") as f:
+        return yaml.safe_load(f)
 
-    Args:
-        image1: The first image (OpenCV image).
-        image2: The second image (OpenCV image).
-        threshold: The threshold of changed pixels that triggers failure detection.
+config = load_config()
 
-    Returns:
-        True if failure is detected, False otherwise.
-    """
-    bg_subtractor = cv2.createBackgroundSubtractorMOG2()
-    fg_mask1 = bg_subtractor.apply(image1)
-    fg_mask2 = bg_subtractor.apply(image2)
+# Configure logging
+logging.basicConfig(
+    filename=config.get("log_path", "/tmp/klipper-pfd.log"),
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
-    # Calculate the number of changed pixels
-    changed_pixels = cv2.countNonZero(fg_mask2)
-    
-    if changed_pixels > threshold:
-        return True  # Failure detected
-    return False
+# ------------------------------------------------------------
+# Camera Snapshot Handler
+# ------------------------------------------------------------
 
-def load_settings():
-    """Load configuration from the settings.yaml file"""
-    with open("config.yaml", 'r') as file:
-        settings = yaml.safe_load(file)
-    return settings
+class Camera:
+    def __init__(self, url):
+        self.url = url
+
+    async def snap(self):
+        """Grab a snapshot image from the camera."""
+        timeout = aiohttp.ClientTimeout(total=3)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            try:
+                async with session.get(self.url) as response:
+                    if response.status == 200:
+                        return await response.read()
+                    else:
+                        logging.warning(f"Camera returned status {response.status}")
+                        return None
+            except Exception as e:
+                logging.error(f"Camera snapshot error: {e}")
+                return None
+
+# ------------------------------------------------------------
+# Moonraker Toolhead Motion Detection
+# ------------------------------------------------------------
+
+async def is_toolhead_still(session, moonraker_url):
+    """Returns True if toolhead velocity is 0."""
+    try:
+        url = f"{moonraker_url}/printer/objects/query?toolhead"
+        async with session.get(url) as r:
+            data = await r.json()
+            vel = data["result"]["status"]["toolhead"]["velocity"]
+            return vel == 0
+    except Exception as e:
+        logging.error(f"Moonraker query failed: {e}")
+        return False
+
+# ------------------------------------------------------------
+# Failure Detection Logic
+# ------------------------------------------------------------
+
+def detect_difference(img1, img2, threshold):
+    """Detects pixel differences between two images."""
+    bg = cv2.createBackgroundSubtractorMOG2()
+
+    # Warm-up with first image
+    bg.apply(img1)
+
+    # Apply to second
+    mask = bg.apply(img2)
+
+    # Count changed pixels
+    diff_pixels = cv2.countNonZero(mask)
+
+    logging.info(f"Pixel diff: {diff_pixels}")
+
+    return diff_pixels > threshold
+
+
+# ------------------------------------------------------------
+# Moonraker Print Action
+# ------------------------------------------------------------
+
+async def perform_failure_action(action, session, moonraker_url):
+    """Pause or cancel print through Moonraker."""
+    try:
+        if action == "pause":
+            await session.post(f"{moonraker_url}/printer/print/pause")
+            logging.warning(">>> Print paused due to detected failure!")
+        elif action == "cancel":
+            await session.post(f"{moonraker_url}/printer/print/cancel")
+            logging.warning(">>> Print canceled due to detected failure!")
+    except Exception as e:
+        logging.error(f"Failed to send action to Moonraker: {e}")
+
+# ------------------------------------------------------------
+# Main Loop
+# ------------------------------------------------------------
 
 async def main():
-    # Load settings from config.yaml
-    settings = load_settings()
+    logging.info("Starting Klipper Print Failure Detection service...")
 
-    # Get camera IP and other settings from the config
-    camera_ip = settings.get("camera_ip", "http://your-camera-ip")  # Default IP if not found
-    failure_threshold = settings.get("failure_threshold", 5000)
-    capture_delay = settings.get("capture_delay", 5)
-    pause_on_failure = settings.get("pause_on_failure", True)
+    camera = Camera(config["camera_url"])
+    moonraker_url = config["moonraker_url"]
+    check_interval = config["check_interval"]
+    threshold = config["failure_threshold"]
+    needed = config["consecutive_failures"]
+    action = config["on_failure"]
 
-    camera = MJPEG(camera_ip)
-    
-    # Capture the first image
-    image1 = await camera.snap()
-    if not image1:
-        print("Failed to capture image from camera.")
-        return
+    failure_count = 0
+    last_frame = None
 
-    # Simulate a delay before capturing the second image
-    await asyncio.sleep(capture_delay)
+    async with aiohttp.ClientSession() as session:
+        while True:
+            # Check motion
+            still = await is_toolhead_still(session, moonraker_url)
 
-    # Capture the second image
-    image2 = await camera.snap()
-    if not image2:
-        print("Failed to capture image from camera.")
-        return
+            if not still:
+                logging.info("Toolhead moving — skipping check.")
+                await asyncio.sleep(check_interval)
+                continue
 
-    # Convert to OpenCV images (this assumes MJPEG frames are JPEG or similar format)
-    np_image1 = np.frombuffer(image1, np.uint8)
-    np_image2 = np.frombuffer(image2, np.uint8)
-    image1_cv = cv2.imdecode(np_image1, cv2.IMREAD_COLOR)
-    image2_cv = cv2.imdecode(np_image2, cv2.IMREAD_COLOR)
+            # Capture image
+            frame_data = await camera.snap()
+            if not frame_data:
+                logging.warning("No frame captured.")
+                await asyncio.sleep(check_interval)
+                continue
 
-    # Check for movement between the two images
-    if detect_movement_background_subtraction(image1_cv, image2_cv, threshold=failure_threshold):
-        print("Print failure detected!")
-        if pause_on_failure:
-            print("Pausing the print...")
-            # Trigger action: Pause/Cancel print here (e.g., send G-code commands to the printer)
-    else:
-        print("No failure detected.")
+            np_frame = np.frombuffer(frame_data, np.uint8)
+            frame = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
 
-# Run the detection asynchronously
-asyncio.run(main())
+            if last_frame is None:
+                last_frame = frame
+                await asyncio.sleep(check_interval)
+                continue
+
+            # Compare frames
+            if detect_difference(last_frame, frame, threshold):
+                failure_count += 1
+                logging.warning(f"Failure suspicion {failure_count}/{needed}")
+            else:
+                failure_count = 0
+
+            # Trigger action if needed
+            if failure_count >= needed:
+                await perform_failure_action(action, session, moonraker_url)
+                failure_count = 0
+
+            last_frame = frame
+            await asyncio.sleep(check_interval)
+
+# ------------------------------------------------------------
+# Run
+# ------------------------------------------------------------
+
+if __name__ == "__main__":
+    asyncio.run(main())
