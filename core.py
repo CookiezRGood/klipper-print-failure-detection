@@ -3,9 +3,7 @@ import asyncio
 import cv2
 import numpy as np
 import yaml
-import time
 import logging
-from pathlib import Path
 
 # ------------------------------------------------------------
 # Load configuration
@@ -48,17 +46,34 @@ class Camera:
                 return None
 
 # ------------------------------------------------------------
-# Moonraker Toolhead Motion Detection
+# Moonraker Toolhead Motion Detection (Position-Based)
 # ------------------------------------------------------------
 
+last_position = None
+
 async def is_toolhead_still(session, moonraker_url):
-    """Returns True if toolhead velocity is 0."""
+    """Toolhead is considered still if its position hasn't changed between checks."""
+    global last_position
     try:
         url = f"{moonraker_url}/printer/objects/query?toolhead"
         async with session.get(url) as r:
             data = await r.json()
-            vel = data["result"]["status"]["toolhead"]["velocity"]
-            return vel == 0
+
+            pos = data["result"]["status"]["toolhead"]["position"]
+
+            if last_position is None:
+                last_position = pos
+                return False  # First sample — assume moving
+
+            # Calculate total movement across X/Y/Z
+            movement = sum(abs(pos[i] - last_position[i]) for i in range(3))
+
+            # Update stored position
+            last_position = pos
+
+            # Movement threshold (mm)
+            return movement < 0.01
+
     except Exception as e:
         logging.error(f"Moonraker query failed: {e}")
         return False
@@ -71,10 +86,10 @@ def detect_difference(img1, img2, threshold):
     """Detects pixel differences between two images."""
     bg = cv2.createBackgroundSubtractorMOG2()
 
-    # Warm-up with first image
+    # Warm-up with first frame
     bg.apply(img1)
 
-    # Apply to second
+    # Apply to second frame
     mask = bg.apply(img2)
 
     # Count changed pixels
@@ -84,25 +99,26 @@ def detect_difference(img1, img2, threshold):
 
     return diff_pixels > threshold
 
-
 # ------------------------------------------------------------
-# Moonraker Print Action
+# Moonraker Print Actions
 # ------------------------------------------------------------
 
 async def perform_failure_action(action, session, moonraker_url):
-    """Pause or cancel print through Moonraker."""
+    """Pause or cancel print via Moonraker."""
     try:
         if action == "pause":
             await session.post(f"{moonraker_url}/printer/print/pause")
             logging.warning(">>> Print paused due to detected failure!")
+
         elif action == "cancel":
             await session.post(f"{moonraker_url}/printer/print/cancel")
             logging.warning(">>> Print canceled due to detected failure!")
+
     except Exception as e:
         logging.error(f"Failed to send action to Moonraker: {e}")
 
 # ------------------------------------------------------------
-# Main Loop
+# Main Logic Loop
 # ------------------------------------------------------------
 
 async def main():
@@ -120,7 +136,8 @@ async def main():
 
     async with aiohttp.ClientSession() as session:
         while True:
-            # Check motion
+
+            # 1. Check toolhead motion
             still = await is_toolhead_still(session, moonraker_url)
 
             if not still:
@@ -128,7 +145,7 @@ async def main():
                 await asyncio.sleep(check_interval)
                 continue
 
-            # Capture image
+            # 2. Capture snapshot
             frame_data = await camera.snap()
             if not frame_data:
                 logging.warning("No frame captured.")
@@ -143,14 +160,14 @@ async def main():
                 await asyncio.sleep(check_interval)
                 continue
 
-            # Compare frames
+            # 3. Compare frames
             if detect_difference(last_frame, frame, threshold):
                 failure_count += 1
                 logging.warning(f"Failure suspicion {failure_count}/{needed}")
             else:
                 failure_count = 0
 
-            # Trigger action if needed
+            # 4. If enough consecutive detections — trigger action
             if failure_count >= needed:
                 await perform_failure_action(action, session, moonraker_url)
                 failure_count = 0
