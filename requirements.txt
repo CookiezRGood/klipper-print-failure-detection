@@ -1,4 +1,4 @@
-opencv-python
-numpy
-aiohttp
 flask
+numpy
+requests
+opencv-python-headless
