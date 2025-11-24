@@ -1,141 +1,105 @@
-/* Mainsail-inspired Dark Theme */
-body {
-    background-color: #121212;
-    color: #e0e0e0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    margin: 0;
-    padding: 20px;
-    box-sizing: border-box;
-}
 
-/* Main Layout */
-.container {
-    max-width: 800px;
-    margin: 0 auto;
-    background-color: #1e1e1e; /* Card background */
-    padding: 25px;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-}
-
-/* Header Section */
-header {
+/* Header controls */
+.camera-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #333;
-    padding-bottom: 15px;
-    margin-bottom: 25px;
+    margin-bottom: 10px;
 }
 
-h2 {
-    margin: 0;
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #ffffff;
-}
-
-h3 {
-    margin-top: 0;
-    margin-bottom: 15px;
-    font-size: 1.1rem;
-    color: #b0b0b0;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* Status Badge */
-.status-badge {
-    background-color: #f39c12; /* Default Loading Orange */
-    color: white;
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-size: 0.9rem;
-    font-weight: bold;
-    text-transform: uppercase;
-}
-
-/* Camera Feed Section */
-.camera-section {
-    margin-bottom: 30px;
-}
-
-#camera-container {
-    width: 100%;
-    height: 400px;
-    background-color: #000;
+.controls {
+    margin-top: 20px;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid #333;
+    justify-content: flex-end;
 }
 
-img.live-feed {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-}
-
-/* Settings Section */
-.settings-section {
-    background-color: #252525;
-    padding: 20px;
-    border-radius: 6px;
-}
-
-.setting-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-    padding: 10px;
-    background-color: #2d2d2d;
-    border-radius: 4px;
-    border-left: 4px solid #2196F3; /* Blue accent on left */
-}
-
-label {
-    font-size: 0.95rem;
-    color: #e0e0e0;
-}
-
-input[type="number"] {
-    background-color: #333;
-    border: 1px solid #444;
+/* Secondary Button (Grey) */
+.secondary-btn {
+    background-color: #444;
     color: white;
-    padding: 8px;
-    border-radius: 4px;
-    width: 80px;
-    text-align: center;
-    font-size: 1rem;
-}
-
-input[type="number"]:focus {
-    outline: none;
-    border-color: #2196F3;
-}
-
-/* Buttons */
-button {
-    width: 100%;
-    padding: 12px;
-    background-color: #2196F3; /* Mainsail Blue */
-    color: white;
+    padding: 10px 20px;
     border: none;
     border-radius: 4px;
     cursor: pointer;
     font-size: 1rem;
-    font-weight: 600;
-    transition: background-color 0.2s ease;
-    margin-top: 10px;
+    width: auto; /* Allow it to shrink */
+}
+.secondary-btn:hover { background-color: #555; }
+
+/* Modal Styling */
+dialog {
+    background-color: #1e1e1e;
+    color: white;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 0;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
 }
 
-button:hover {
-    background-color: #1976D2;
+dialog::backdrop {
+    background: rgba(0, 0, 0, 0.7);
 }
 
-button:active {
-    transform: translateY(1px);
+.modal-header {
+    background-color: #252525;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
 }
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #333;
+    text-align: right;
+}
+
+.icon-btn {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 1.5rem;
+    cursor: pointer;
+    width: auto;
+    margin: 0;
+    padding: 0;
+}
+.icon-btn:hover { color: white; }
+
+/* Toggle Switch */
+.toggle-switch {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+.toggle-switch input { display: none; }
+.toggle-switch .slider {
+    width: 40px;
+    height: 20px;
+    background-color: #444;
+    border-radius: 20px;
+    position: relative;
+    margin-right: 10px;
+    transition: 0.3s;
+}
+.toggle-switch .slider::before {
+    content: "";
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    border-radius: 50%;
+    transition: 0.3s;
+}
+.toggle-switch input:checked + .slider { background-color: #2196F3; }
+.toggle-switch input:checked + .slider::before { transform: translateX(20px); }
+.label-text { font-size: 0.9rem; color: #ccc; }
