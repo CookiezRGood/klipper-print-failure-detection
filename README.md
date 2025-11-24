@@ -1,2 +1,24 @@
-# klipper-print-failure-detection
-Image comparison based print failure detection system with mainsail UI integration
+# Print Failure Detection Plugin for Klipper
+
+This plugin uses image comparison (SSIM) to detect print failures. It is integrated with Mainsail for real-time monitoring of print status. This plugin works with a camera pointed at the print bed and uses dynamic motion-based masking to detect toolhead movement during printing.
+
+## Features
+- Detects print failures based on image comparison (SSIM).
+- Real-time camera preview in Mainsail.
+- Adjustable thresholds for SSIM, stillness, and layer height.
+- Web-based interface for adjusting settings.
+- Debug overlays for toolhead masking.
+
+## Installation
+
+1. Clone this repository to your Raspberry Pi:
+   ```bash
+   cd ~/klipper/klippy/extras/
+   git clone https://github.com/CookiezRGood/klipper-print-failure-detection.git print_failure_detection
+   ```
+
+2. Run the installation script:
+   ```bash
+   cd ~/klipper/klippy/extras/print_failure_detection
+   ./install.sh
+   ```
