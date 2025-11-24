@@ -6,11 +6,10 @@ import numpy as np
 import requests
 from flask import Flask, jsonify, request, send_from_directory, Response
 
-# Import the SSIM logic from your core folder
+# Import SSIM logic if available, else fallback
 try:
     from core.detection import ssim
 except ImportError:
-    # Fallback if core folder is missing (prevents crash)
     def ssim(img1, img2): return 1.0
 
 logging.basicConfig(level=logging.INFO)
@@ -24,19 +23,18 @@ state = {
     "debug_frame": None,
     "status": "idle",
     "previous_gray": None,
-    "last_stable_frame": None,  # The "Reference" image to compare against
-    "current_ssim": 1.0,        # 1.0 = Perfect Match (100%)
-    "failure_count": 0          # Current retries
+    "last_stable_frame": None,  # The reference image we compare against
+    "current_ssim": 1.0,
+    "failure_count": 0
 }
 
 config = {
-    "ssim_threshold": 0.95,
-    "stillness_threshold": 0.20,
+    "ssim_threshold": 0.90,     # Lowered slightly to be less sensitive to lighting
     "check_interval": 0.2,
     "camera_url": "http://192.168.10.153/webcam/?action=snapshot",
     "mask_margin": 15,
-    "max_mask_percent": 0.15,
-    "consecutive_failures": 3   # Max retries before triggering failure
+    "max_mask_percent": 0.25,   # Increased to prevent false positives on large printheads
+    "consecutive_failures": 3
 }
 
 def background_monitor():
@@ -60,44 +58,42 @@ def background_monitor():
                 gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
                 if state["previous_gray"] is None:
+                    # First boot: Initialize everything
                     state["previous_gray"] = gray
-                    state["last_stable_frame"] = gray # Initialize reference
-                
+                    state["last_stable_frame"] = gray
+                    time.sleep(1) # Wait for camera to settle
+                    continue
+
                 # Calculate difference
                 frame_delta = cv2.absdiff(state["previous_gray"], gray)
                 thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
                 mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
 
-                # Check Mask Size
+                # Check how much of the screen is moving
                 mask_pixels = cv2.countNonZero(mask_dilated)
                 mask_coverage = mask_pixels / total_pixels
 
                 # --- 2. Logic Fork ---
-                if mask_coverage > config['max_mask_percent']:
-                    # A. FAILURE: Moving blob is too big
-                    state["status"] = "failure_detected"
-                    cv2.putText(debug_img, f"BLOB DETECTED! ({int(mask_coverage*100)}%)", 
-                              (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                    cv2.rectangle(debug_img, (0,0), (width, height), (0, 0, 255), 10)
                 
-                elif mask_coverage > 0.001: 
-                    # B. MOTION: Toolhead is moving.
-                    # We CANNOT check for failure while moving. 
-                    # Reset SSIM to perfect (so UI is green) but KEEP failure count (don't reset it yet).
-                    state["status"] = "monitoring"
-                    state["current_ssim"] = 1.0 
+                if mask_coverage > 0.001:
+                    # === MOTION DETECTED ===
+                    # If the printer is moving, we assume it is VALID.
+                    # We RESET the failure count and UPDATE the reference frame.
                     
+                    state["status"] = "monitoring"
+                    state["current_ssim"] = 1.0
+                    state["failure_count"] = 0  # Clear any pending failures
+                    state["last_stable_frame"] = gray # Update reference to new position
+                    
+                    # Draw the green mask for the UI
                     contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     if contours:
                         large_contours = [c for c in contours if cv2.contourArea(c) > 500]
-                        
-                        # Draw Mask
                         overlay = debug_img.copy()
                         cv2.drawContours(overlay, large_contours, -1, (0, 255, 0), -1)
                         cv2.addWeighted(overlay, 0.3, debug_img, 0.7, 0, debug_img)
-
-                        # --- FIX: LABEL FOLLOWING ---
-                        # Find the biggest contour to attach the label to
+                        
+                        # Attach label to the biggest blob
                         if large_contours:
                             c = max(large_contours, key=cv2.contourArea)
                             x, y, w, h = cv2.boundingRect(c)
@@ -105,29 +101,37 @@ def background_monitor():
                                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
                 else:
-                    # C. STILL: Printer is paused or between moves.
-                    # This is the ONLY time we can check for failure (SSIM).
-                    state["status"] = "checking"
+                    # === NO MOTION (STILL) ===
+                    # Only check for failure if we are completely still
                     
                     if state["last_stable_frame"] is not None:
-                        # Compare current 'still' frame to the last 'still' frame
                         score = ssim(gray, state["last_stable_frame"])
                         state["current_ssim"] = score
 
                         if score < config["ssim_threshold"]:
-                            # Potential Failure
-                            state["failure_count"] += 1
-                            log_info(f"Low Match: {score:.3f} | Retry {state['failure_count']}/{config['consecutive_failures']}")
+                            # --- POTENTIAL FAILURE ---
+                            # Only increment if we haven't already hit the max
+                            if state["failure_count"] < config["consecutive_failures"]:
+                                state["failure_count"] += 1
                             
+                            log_info(f"Low SSIM: {score:.3f} | Failures: {state['failure_count']}")
+                            
+                            # Trigger Failure State
                             if state["failure_count"] >= config["consecutive_failures"]:
                                 state["status"] = "failure_detected"
+                        
                         else:
-                            # Good Match - Reset Counters
+                            # --- STABLE / HEALTHY ---
+                            # Image matches reference. We are good.
+                            # Slowly update reference to account for lighting changes
                             state["failure_count"] = 0
-                            state["last_stable_frame"] = gray # Update reference
-                    
+                            state["status"] = "checking"
+                            state["last_stable_frame"] = gray 
+
                 state["previous_gray"] = gray
                 state["debug_frame"] = debug_img
+            else:
+                state["status"] = "camera_error"
 
         except Exception as e:
             state["status"] = "error"
@@ -155,7 +159,6 @@ def settings():
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
-    # Send extra data to UI
     return jsonify({
         "status": state["status"],
         "ssim": state["current_ssim"],
