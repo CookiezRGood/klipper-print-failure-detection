@@ -20,7 +20,7 @@ This plugin uses image comparison (SSIM) to detect print failures. It is integra
 
 2. Run the installation script:
    ```bash
-   cd ~/klipper/klippy/extras/klipper-print_failure_detection
+   cd ~/klipper/klippy/extras/klipper-print-failure-detection
    chmod +x install.sh
    sudo ./install.sh
    ```
