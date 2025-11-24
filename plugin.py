@@ -6,11 +6,6 @@ import numpy as np
 import requests
 from flask import Flask, jsonify, request, send_from_directory, Response
 
-# Import your core logic
-from core.motion import is_toolhead_still
-from core.detection import ssim
-from core.utils import log_info, log_warning
-
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logging.info("Starting Print Failure Detection Plugin...")
@@ -21,61 +16,98 @@ app = Flask(__name__, static_folder='web_interface')
 state = {
     "latest_frame": None,
     "debug_frame": None,
-    "last_position": [0, 0, 0],
     "status": "idle",
-    "mask": None
+    "previous_gray": None
 }
 
 config = {
     "ssim_threshold": 0.97,
     "stillness_threshold": 0.20,
-    "layer_min_step": 0.15,
+    "check_interval": 0.2,
     "camera_url": "http://192.168.10.153/webcam/?action=snapshot",
-    "check_interval": 1.0
+    "mask_margin": 15,
+    "max_mask_percent": 0.15  # SAFETY: If mask covers >15% of screen, it's a failure
 }
 
-# --- Background Processing Loop ---
 def background_monitor():
     log_info("Background monitor started.")
+    dilate_kernel = np.ones((config['mask_margin'], config['mask_margin']), np.uint8)
+
     while True:
         try:
             # 1. Fetch Image
             resp = requests.get(config['camera_url'], timeout=2)
             if resp.status_code == 200:
-                # Convert bytes to numpy image
                 arr = np.frombuffer(resp.content, np.uint8)
                 img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                 
-                # Update global state (Raw Frame)
-                state["latest_frame"] = img
-
-                # 2. Create Debug Frame (Simulate Masking)
-                # In a real scenario, you'd calculate the mask here based on motion.
-                # For now, we'll draw a box to show it's working.
+                state["latest_frame"] = img.copy()
                 debug_img = img.copy()
-                
-                # Example: Draw a red box in the center (The "Mask")
-                h, w = debug_img.shape[:2]
-                center_x, center_y = w // 2, h // 2
-                cv2.rectangle(debug_img, (center_x - 50, center_y - 50), (center_x + 50, center_y + 50), (0, 0, 255), 2)
-                cv2.putText(debug_img, "Motion Mask Area", (center_x - 60, center_y - 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-                
+                height, width = img.shape[:2]
+                total_pixels = height * width
+
+                # 2. Motion Detection
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                gray = cv2.GaussianBlur(gray, (21, 21), 0)
+
+                if state["previous_gray"] is None:
+                    state["previous_gray"] = gray
+                else:
+                    # A. Calculate Difference
+                    frame_delta = cv2.absdiff(state["previous_gray"], gray)
+                    thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
+
+                    # B. Expand the mask (The "Bubble" around the toolhead)
+                    mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
+
+                    # --- SAFETY CHECK: IS THE MASK TOO BIG? ---
+                    # Count how many white pixels are in the mask
+                    mask_pixels = cv2.countNonZero(mask_dilated)
+                    mask_coverage = mask_pixels / total_pixels
+
+                    if mask_coverage > config['max_mask_percent']:
+                        # The moving object is HUGE. This is likely spaghetti stuck to the head.
+                        state["status"] = "failure_detected"
+                        
+                        # Draw a RED warning box
+                        cv2.putText(debug_img, f"FAILURE: MOVING OBJECT TOO LARGE ({int(mask_coverage*100)}%)", 
+                                  (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                        cv2.rectangle(debug_img, (0,0), (width, height), (0, 0, 255), 10)
+                        
+                    else:
+                        # Normal Operation
+                        contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        
+                        if contours:
+                            # Draw the Green Mask (Normal)
+                            large_contours = [c for c in contours if cv2.contourArea(c) > 500]
+                            
+                            # Visual Effect: Semi-transparent green
+                            overlay = debug_img.copy()
+                            cv2.drawContours(overlay, large_contours, -1, (0, 255, 0), -1)
+                            cv2.addWeighted(overlay, 0.3, debug_img, 0.7, 0, debug_img)
+                            
+                            state["status"] = "monitoring"
+                        else:
+                            state["status"] = "monitoring"
+
+                    state["previous_gray"] = gray
+
                 state["debug_frame"] = debug_img
-                state["status"] = "monitoring"
             else:
                 state["status"] = "camera_error"
 
         except Exception as e:
-            # log_warning(f"Monitor loop error: {e}")
+            # logging.error(f"Error: {e}")
             state["status"] = "error"
         
         time.sleep(config["check_interval"])
 
-# Start the background thread
+def log_info(msg):
+    logging.info(msg)
+
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
-
-# --- Routes ---
 
 @app.route('/')
 def serve_index():
@@ -90,7 +122,6 @@ def settings():
     if request.method == 'POST':
         data = request.json
         config.update(data)
-        log_info("Settings updated")
     return jsonify(config)
 
 @app.route('/api/status', methods=['GET'])
@@ -99,19 +130,15 @@ def get_status():
 
 @app.route('/api/latest_frame')
 def latest_frame():
-    # Helper to encode image to JPG bytes
     img = state["latest_frame"]
-    if img is None:
-        return "No image", 404
+    if img is None: return "No image", 404
     _, buffer = cv2.imencode('.jpg', img)
     return Response(buffer.tobytes(), mimetype='image/jpeg')
 
 @app.route('/api/debug_frame')
 def debug_frame():
-    # Returns the image with the MASK overlay
     img = state["debug_frame"]
-    if img is None:
-        return "No debug image", 404
+    if img is None: return "No debug image", 404
     _, buffer = cv2.imencode('.jpg', img)
     return Response(buffer.tobytes(), mimetype='image/jpeg')
 
