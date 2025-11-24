@@ -160,6 +160,13 @@ def preprocess(frame):
     gray = cv2.GaussianBlur(gray, (5,5), 0)
     return gray
 
+def calculate_min_layer_step(layer_height):
+    """
+    Automatically calculate the minimum Z-step needed to trigger SSIM.
+    This is 75% of the user's slicer layer height by default.
+    """
+    return layer_height * 0.75
+
 def detect_failure_ssim(frame1, frame2, threshold, dyn_mask, debug=False, debug_dir="/tmp/pfd_debug"):
 
     g1 = preprocess(frame1)
@@ -216,6 +223,10 @@ async def main():
     threshold = config.get("ssim_threshold", 0.97)
     needed = config.get("consecutive_failures", 3)
     action = config.get("on_failure", "pause")
+
+    # Layer change detection configuration
+    slicer_layer_height = config.get("slicer_layer_height", 0.20)  # User-defined slicer height
+    layer_min_step = calculate_min_layer_step(slicer_layer_height)
 
     dyn_cfg = config.get("dynamic_mask", {})
     dyn_enabled = dyn_cfg.get("enabled", True)
