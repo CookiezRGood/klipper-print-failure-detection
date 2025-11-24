@@ -2,95 +2,33 @@
 #  Klipper Print Failure Detection - Configuration File
 # ============================================================
 
-# ------------------------------------------------------------
-# CAMERA SETTINGS
-# ------------------------------------------------------------
-# Snapshot URL (NOT the MJPEG stream)
-# Crowsnest example for mjpg-streamer:
-#   http://<printer-ip>:8080/?action=snapshot
-#
+# Camera Settings
 camera_url: "http://192.168.10.153/webcam/?action=snapshot"
 
-
-# ------------------------------------------------------------
-# MOONRAKER SETTINGS
-# ------------------------------------------------------------
-# Local Moonraker instance
+# Moonraker Settings
 moonraker_url: "http://127.0.0.1:7125"
 
-
-# ------------------------------------------------------------
-# FAILURE DETECTION SETTINGS
-# ------------------------------------------------------------
-
-# How often to check the camera (seconds)
+# Failure Detection Settings
 check_interval: 5
-
-# SSIM threshold for failure detection
-# Increase to make more sensitive (e.g. 0.98)
-# Decrease to reduce sensitivity (e.g. 0.95)
 ssim_threshold: 0.97
-
-# Number of consecutive "failure" frames required
 consecutive_failures: 3
-
-# Action on failure: "pause" or "cancel"
 on_failure: "pause"
 
-
-# ------------------------------------------------------------
-# UNIVERSAL DYNAMIC TOOLHEAD MASKING (FRAME DIFFERENCE)
-# ------------------------------------------------------------
-dynamic_mask:
-
-  # Enable/disable dynamic masking
-  enabled: true
-
-  # Minimum contour area (pixels) for motion to be considered the toolhead.
-  # Keep >80 unless needed.
-  min_area: 100
-
-  # Add padding around detected toolhead region
-  margin_px: 10
-
-  # Enable saving visual debug overlays of the mask detection.
-  # These appear as images with the mask drawn in red.
-  debug_save_overlays: true
-
-  # Where debug overlay images are saved
-  debug_dir: "/tmp/pfd_debug"
-
-
-# ------------------------------------------------------------
-# LAYER CHANGE DETECTION SETTINGS
-# ------------------------------------------------------------
-slicer_layer_height: 0.20 # Example: the user's slicer layer height
-
-# The system will automatically calculate the min_layer_step:
-# min_layer_step = 75% of slicer_layer_height
+# Layer Change Detection Settings
+slicer_layer_height: 0.20  # User-defined slicer layer height (mm)
 layer_trigger:
   enabled: true
-  layer_min_step: 0.15      # Auto-calculated from slicer_layer_height
-  stillness_threshold: 0.20 # Toolhead stillness threshold
-  settle_time: 0.2          # Time to wait after Z change before SSIM trigger
+  layer_min_step: 0.15  # Automatically calculated from slicer_layer_height (75% of slicer_layer_height)
+  stillness_threshold: 0.20
+  settle_time: 0.2  # Time to wait after Z change before SSIM trigger
 
+# Dynamic Toolhead Masking
+dynamic_mask:
+  enabled: true
+  min_area: 100
+  margin_px: 10
+  debug_save_overlays: true
+  debug_dir: "/tmp/pfd_debug"
 
-# ------------------------------------------------------------
-# LOGGING SETTINGS
-# ------------------------------------------------------------
-# Log file location
+# Logging Settings
 log_path: "/tmp/klipper-pfd.log"
-
-
-# ------------------------------------------------------------
-# FUTURE SETTINGS (GUI LATER)
-# ------------------------------------------------------------
-# Placeholder entries that will later be controlled via UI:
-#
-# gui:
-#   show_mask_overlay: true
-#   camera_preview_fps: 2
-#   enable_live_view: true
-#   auto_restart_service: true
-#
-# Leave them commented out until GUI system is added.
