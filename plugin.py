@@ -48,10 +48,7 @@ def failure_status():
 
 def run_plugin():
     logging.info("Running Flask app on port 7126...")
-    # threaded=True is important for video/image processing later
     app.run(host='0.0.0.0', port=7126, threaded=True)
 
 if __name__ == "__main__":
-    # We don't need a separate thread if we run this directly, 
-    # but for a service, keeping it simple is best.
     run_plugin()
