@@ -125,6 +125,9 @@ button {
     color: #e0e0e0;
     padding: 8px 16px;
     border: 1px solid #444;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 .secondary-btn:hover { background-color: #444; }
 
@@ -166,6 +169,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
     background-color: #252525; padding: 15px; display: flex;
     justify-content: space-between; align-items: center; border-bottom: 1px solid #333;
 }
+.modal-header h3 { margin: 0; font-size: 1rem; color: #fff; }
 .modal-body { padding: 20px; }
 .setting-row { margin-bottom: 15px; }
 .setting-row label { display: block; margin-bottom: 5px; font-size: 0.9rem; color: #bbb; }
@@ -173,4 +177,5 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
     width: 100%; background-color: #121212; border: 1px solid #333;
     color: white; padding: 8px; border-radius: 4px; box-sizing: border-box;
 }
+.setting-row input:focus { outline: 1px solid #2196F3; border-color: #2196F3; }
 .modal-footer { padding: 15px; border-top: 1px solid #333; text-align: right; }
