@@ -6,7 +6,13 @@ import numpy as np
 import requests
 from flask import Flask, jsonify, request, send_from_directory, Response
 
-# Set up logging
+# Import the SSIM logic from your core folder
+try:
+    from core.detection import ssim
+except ImportError:
+    # Fallback if core folder is missing (prevents crash)
+    def ssim(img1, img2): return 1.0
+
 logging.basicConfig(level=logging.INFO)
 logging.info("Starting Print Failure Detection Plugin...")
 
@@ -17,16 +23,20 @@ state = {
     "latest_frame": None,
     "debug_frame": None,
     "status": "idle",
-    "previous_gray": None
+    "previous_gray": None,
+    "last_stable_frame": None,  # The "Reference" image to compare against
+    "current_ssim": 1.0,        # 1.0 = Perfect Match (100%)
+    "failure_count": 0          # Current retries
 }
 
 config = {
-    "ssim_threshold": 0.97,
+    "ssim_threshold": 0.95,
     "stillness_threshold": 0.20,
     "check_interval": 0.2,
     "camera_url": "http://192.168.10.153/webcam/?action=snapshot",
     "mask_margin": 15,
-    "max_mask_percent": 0.15  # SAFETY: If mask covers >15% of screen, it's a failure
+    "max_mask_percent": 0.15,
+    "consecutive_failures": 3   # Max retries before triggering failure
 }
 
 def background_monitor():
@@ -35,7 +45,6 @@ def background_monitor():
 
     while True:
         try:
-            # 1. Fetch Image
             resp = requests.get(config['camera_url'], timeout=2)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
@@ -46,59 +55,81 @@ def background_monitor():
                 height, width = img.shape[:2]
                 total_pixels = height * width
 
-                # 2. Motion Detection
+                # --- 1. Motion Detection ---
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
                 if state["previous_gray"] is None:
                     state["previous_gray"] = gray
+                    state["last_stable_frame"] = gray # Initialize reference
+                
+                # Calculate difference
+                frame_delta = cv2.absdiff(state["previous_gray"], gray)
+                thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
+                mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
+
+                # Check Mask Size
+                mask_pixels = cv2.countNonZero(mask_dilated)
+                mask_coverage = mask_pixels / total_pixels
+
+                # --- 2. Logic Fork ---
+                if mask_coverage > config['max_mask_percent']:
+                    # A. FAILURE: Moving blob is too big
+                    state["status"] = "failure_detected"
+                    cv2.putText(debug_img, f"BLOB DETECTED! ({int(mask_coverage*100)}%)", 
+                              (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    cv2.rectangle(debug_img, (0,0), (width, height), (0, 0, 255), 10)
+                
+                elif mask_coverage > 0.001: 
+                    # B. MOTION: Toolhead is moving.
+                    # We CANNOT check for failure while moving. 
+                    # Reset SSIM to perfect (so UI is green) but KEEP failure count (don't reset it yet).
+                    state["status"] = "monitoring"
+                    state["current_ssim"] = 1.0 
+                    
+                    contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    if contours:
+                        large_contours = [c for c in contours if cv2.contourArea(c) > 500]
+                        
+                        # Draw Mask
+                        overlay = debug_img.copy()
+                        cv2.drawContours(overlay, large_contours, -1, (0, 255, 0), -1)
+                        cv2.addWeighted(overlay, 0.3, debug_img, 0.7, 0, debug_img)
+
+                        # --- FIX: LABEL FOLLOWING ---
+                        # Find the biggest contour to attach the label to
+                        if large_contours:
+                            c = max(large_contours, key=cv2.contourArea)
+                            x, y, w, h = cv2.boundingRect(c)
+                            cv2.putText(debug_img, "Mask Active", (x, y - 10), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
                 else:
-                    # A. Calculate Difference
-                    frame_delta = cv2.absdiff(state["previous_gray"], gray)
-                    thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
+                    # C. STILL: Printer is paused or between moves.
+                    # This is the ONLY time we can check for failure (SSIM).
+                    state["status"] = "checking"
+                    
+                    if state["last_stable_frame"] is not None:
+                        # Compare current 'still' frame to the last 'still' frame
+                        score = ssim(gray, state["last_stable_frame"])
+                        state["current_ssim"] = score
 
-                    # B. Expand the mask (The "Bubble" around the toolhead)
-                    mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
-
-                    # --- SAFETY CHECK: IS THE MASK TOO BIG? ---
-                    # Count how many white pixels are in the mask
-                    mask_pixels = cv2.countNonZero(mask_dilated)
-                    mask_coverage = mask_pixels / total_pixels
-
-                    if mask_coverage > config['max_mask_percent']:
-                        # The moving object is HUGE. This is likely spaghetti stuck to the head.
-                        state["status"] = "failure_detected"
-                        
-                        # Draw a RED warning box
-                        cv2.putText(debug_img, f"FAILURE: MOVING OBJECT TOO LARGE ({int(mask_coverage*100)}%)", 
-                                  (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                        cv2.rectangle(debug_img, (0,0), (width, height), (0, 0, 255), 10)
-                        
-                    else:
-                        # Normal Operation
-                        contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                        
-                        if contours:
-                            # Draw the Green Mask (Normal)
-                            large_contours = [c for c in contours if cv2.contourArea(c) > 500]
+                        if score < config["ssim_threshold"]:
+                            # Potential Failure
+                            state["failure_count"] += 1
+                            log_info(f"Low Match: {score:.3f} | Retry {state['failure_count']}/{config['consecutive_failures']}")
                             
-                            # Visual Effect: Semi-transparent green
-                            overlay = debug_img.copy()
-                            cv2.drawContours(overlay, large_contours, -1, (0, 255, 0), -1)
-                            cv2.addWeighted(overlay, 0.3, debug_img, 0.7, 0, debug_img)
-                            
-                            state["status"] = "monitoring"
+                            if state["failure_count"] >= config["consecutive_failures"]:
+                                state["status"] = "failure_detected"
                         else:
-                            state["status"] = "monitoring"
-
-                    state["previous_gray"] = gray
-
+                            # Good Match - Reset Counters
+                            state["failure_count"] = 0
+                            state["last_stable_frame"] = gray # Update reference
+                    
+                state["previous_gray"] = gray
                 state["debug_frame"] = debug_img
-            else:
-                state["status"] = "camera_error"
 
         except Exception as e:
-            # logging.error(f"Error: {e}")
             state["status"] = "error"
         
         time.sleep(config["check_interval"])
@@ -110,12 +141,10 @@ monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
 @app.route('/')
-def serve_index():
-    return send_from_directory('web_interface', 'index.html')
+def serve_index(): return send_from_directory('web_interface', 'index.html')
 
 @app.route('/<path:path>')
-def serve_static(path):
-    return send_from_directory('web_interface', path)
+def serve_static(path): return send_from_directory('web_interface', path)
 
 @app.route('/api/settings', methods=['GET', 'POST'])
 def settings():
@@ -126,7 +155,13 @@ def settings():
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
-    return jsonify({"status": state["status"]})
+    # Send extra data to UI
+    return jsonify({
+        "status": state["status"],
+        "ssim": state["current_ssim"],
+        "failures": state["failure_count"],
+        "max_retries": config["consecutive_failures"]
+    })
 
 @app.route('/api/latest_frame')
 def latest_frame():
