@@ -1,5 +1,5 @@
 # Print Failure Detection Plugin for Klipper
-#IN PROGRESS, DO NOT DOWNLOAD
+# IN PROGRESS, DO NOT DOWNLOAD
 
 This plugin uses image comparison (SSIM) to detect print failures. It is integrated with Mainsail for real-time monitoring of print status. This plugin works with a camera pointed at the print bed and uses dynamic motion-based masking to detect toolhead movement during printing.
 
