@@ -1,5 +1,48 @@
+/* --- Global Reset & Dark Theme --- */
+body {
+    background-color: #121212; /* Dark Background */
+    color: #e0e0e0;            /* Light Text */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    box-sizing: border-box;
+}
 
-/* Header controls */
+/* --- Main Card Container --- */
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+    background-color: #1e1e1e;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* --- Header --- */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+h2 { margin: 0; font-weight: 600; color: #fff; }
+
+/* The Status Badge */
+.status-badge {
+    background-color: #f39c12; /* Default Orange */
+    color: white;
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* --- Camera Section --- */
 .camera-header {
     display: flex;
     justify-content: space-between;
@@ -7,93 +50,91 @@
     margin-bottom: 10px;
 }
 
+h3 { margin: 0; font-size: 1.1rem; color: #bbb; }
+
+#camera-container {
+    width: 100%;
+    height: 500px; /* Taller view */
+    background-color: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: 1px solid #333;
+    overflow: hidden;
+}
+
+img.live-feed {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain; /* Ensures image isn't stretched */
+}
+
+/* --- Controls & Buttons --- */
 .controls {
-    margin-top: 20px;
+    margin-top: 15px;
     display: flex;
     justify-content: flex-end;
 }
 
-/* Secondary Button (Grey) */
-.secondary-btn {
-    background-color: #444;
-    color: white;
-    padding: 10px 20px;
+button {
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
     border: none;
     border-radius: 4px;
-    cursor: pointer;
-    font-size: 1rem;
-    width: auto; /* Allow it to shrink */
+    transition: background 0.2s;
 }
-.secondary-btn:hover { background-color: #555; }
 
-/* Modal Styling */
-dialog {
-    background-color: #1e1e1e;
-    color: white;
+.secondary-btn {
+    background-color: #333;
+    color: #e0e0e0;
+    padding: 8px 16px;
     border: 1px solid #444;
-    border-radius: 8px;
-    padding: 0;
-    width: 90%;
-    max-width: 500px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-}
-
-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.7);
-}
-
-.modal-header {
-    background-color: #252525;
-    padding: 15px 20px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #333;
+    gap: 8px;
 }
+.secondary-btn:hover { background-color: #444; }
 
-.modal-body {
-    padding: 20px;
+.primary-btn {
+    background-color: #2196F3;
+    color: white;
+    padding: 10px 20px;
+    width: 100%;
 }
-
-.modal-footer {
-    padding: 15px 20px;
-    border-top: 1px solid #333;
-    text-align: right;
-}
+.primary-btn:hover { background-color: #1976D2; }
 
 .icon-btn {
-    background: none;
-    border: none;
-    color: #888;
+    background: transparent;
+    color: #999;
     font-size: 1.5rem;
-    cursor: pointer;
-    width: auto;
-    margin: 0;
-    padding: 0;
+    padding: 0 10px;
 }
-.icon-btn:hover { color: white; }
+.icon-btn:hover { color: #fff; }
 
-/* Toggle Switch */
+/* --- Toggle Switch --- */
 .toggle-switch {
     display: flex;
     align-items: center;
     cursor: pointer;
+    user-select: none;
 }
 .toggle-switch input { display: none; }
 .toggle-switch .slider {
-    width: 40px;
-    height: 20px;
+    width: 36px;
+    height: 18px;
     background-color: #444;
-    border-radius: 20px;
+    border-radius: 18px;
     position: relative;
-    margin-right: 10px;
+    margin-right: 8px;
     transition: 0.3s;
 }
 .toggle-switch .slider::before {
     content: "";
     position: absolute;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     left: 2px;
     bottom: 2px;
     background-color: white;
@@ -101,5 +142,55 @@ dialog::backdrop {
     transition: 0.3s;
 }
 .toggle-switch input:checked + .slider { background-color: #2196F3; }
-.toggle-switch input:checked + .slider::before { transform: translateX(20px); }
+.toggle-switch input:checked + .slider::before { transform: translateX(18px); }
 .label-text { font-size: 0.9rem; color: #ccc; }
+
+/* --- Settings Modal (Popup) --- */
+dialog {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 0;
+    width: 400px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+
+.modal-header {
+    background-color: #252525;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
+}
+.modal-header h3 { color: #fff; font-size: 1rem; }
+
+.modal-body { padding: 20px; }
+
+.setting-row {
+    margin-bottom: 15px;
+}
+.setting-row label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+    color: #bbb;
+}
+.setting-row input {
+    width: 100%;
+    background-color: #121212;
+    border: 1px solid #333;
+    color: white;
+    padding: 8px;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+.setting-row input:focus { outline: 1px solid #2196F3; border-color: #2196F3; }
+
+.modal-footer {
+    padding: 15px;
+    border-top: 1px solid #333;
+    text-align: right;
+}
