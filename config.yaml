@@ -1,17 +1,82 @@
-camera_url: "http://192.168.10.153/webcam2/?action=snapshot"
+# ============================================================
+#  Klipper Print Failure Detection - Configuration File
+# ============================================================
+
+# ------------------------------------------------------------
+# CAMERA SETTINGS
+# ------------------------------------------------------------
+# Snapshot URL (NOT the MJPEG stream)
+# Crowsnest example for mjpg-streamer:
+#   http://<printer-ip>:8080/?action=snapshot
+#
+camera_url: "http://192.168.10.153/webcam/?action=snapshot"
+
+
+# ------------------------------------------------------------
+# MOONRAKER SETTINGS
+# ------------------------------------------------------------
+# Local Moonraker instance
 moonraker_url: "http://127.0.0.1:7125"
 
-check_interval: 5
-consecutive_failures: 3
-on_failure: "pause"
 
-# SSIM threshold for detection
+# ------------------------------------------------------------
+# FAILURE DETECTION SETTINGS
+# ------------------------------------------------------------
+
+# How often to check the camera (seconds)
+check_interval: 5
+
+# SSIM threshold for failure detection
+# Increase to make more sensitive (e.g. 0.98)
+# Decrease to reduce sensitivity (e.g. 0.95)
 ssim_threshold: 0.97
 
-mask:
-  top: 120
-  bottom: 0
-  left: 0
-  right: 0
+# Number of consecutive "failure" frames required
+consecutive_failures: 3
 
+# Action on failure: "pause" or "cancel"
+on_failure: "pause"
+
+
+# ------------------------------------------------------------
+# UNIVERSAL DYNAMIC TOOLHEAD MASKING (FRAME DIFFERENCE)
+# ------------------------------------------------------------
+dynamic_mask:
+
+  # Enable/disable dynamic masking
+  enabled: true
+
+  # Minimum contour area (pixels) for motion to be considered the toolhead.
+  # Keep >80 unless needed.
+  min_area: 100
+
+  # Add padding around detected toolhead region
+  margin_px: 10
+
+  # Enable saving visual debug overlays of the mask detection.
+  # These appear as images with the mask drawn in red.
+  debug_save_overlays: true
+
+  # Where debug overlay images are saved
+  debug_dir: "/tmp/pfd_debug"
+
+
+# ------------------------------------------------------------
+# LOGGING SETTINGS
+# ------------------------------------------------------------
+# Log file location
 log_path: "/tmp/klipper-pfd.log"
+
+
+# ------------------------------------------------------------
+# FUTURE SETTINGS (GUI LATER)
+# ------------------------------------------------------------
+# Placeholder entries that will later be controlled via UI:
+#
+# gui:
+#   show_mask_overlay: true
+#   camera_preview_fps: 2
+#   enable_live_view: true
+#   auto_restart_service: true
+#
+# Leave them commented out until GUI system is added.
