@@ -1,13 +1,15 @@
 import logging
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 import threading
+import os
 
-# Set up logging to show info about the startup process
+# Set up logging
 logging.basicConfig(level=logging.INFO)
 logging.info("Starting the Print Failure Detection Plugin...")
 
 # Initialize Flask app
-app = Flask(__name__)
+# We tell Flask that the "static" folder is your "web_interface" folder
+app = Flask(__name__, static_folder='web_interface')
 
 # Sample plugin configuration
 current_config = {
@@ -17,35 +19,39 @@ current_config = {
     "camera_url": "http://192.168.10.153/webcam/?action=snapshot"
 }
 
-# Endpoint to get current settings
+# --- NEW: Route to serve the UI ---
+@app.route('/')
+def serve_index():
+    # This serves the index.html from your web_interface folder
+    return send_from_directory('web_interface', 'index.html')
+
+# Serve other static files (JS/CSS) if they are requested
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory('web_interface', path)
+# ----------------------------------
+
 @app.route('/api/settings', methods=['GET', 'POST'])
 def settings():
     global current_config
     if request.method == 'POST':
-        # Update settings from the frontend
         data = request.json
         current_config.update(data)
     return jsonify(current_config)
 
-# Endpoint to get failure detection status
 @app.route('/api/failure_status', methods=['GET'])
 def failure_status():
-    # Return a dummy status for now (you can update this with actual status)
     status = {
-        "status": "active"  # You can change this dynamically based on detection logic
+        "status": "active" 
     }
     return jsonify(status)
 
-# Function to run Flask in the background
 def run_plugin():
-    logging.info("Running Flask app...")
+    logging.info("Running Flask app on port 7126...")
+    # threaded=True is important for video/image processing later
     app.run(host='0.0.0.0', port=7126, threaded=True)
 
-# Start the Flask app in a separate thread
-plugin_thread = threading.Thread(target=run_plugin)
-plugin_thread.daemon = True
-plugin_thread.start()
-
-# Keep the main script running indefinitely (necessary to keep Flask running)
-while True:
-    pass
+if __name__ == "__main__":
+    # We don't need a separate thread if we run this directly, 
+    # but for a service, keeping it simple is best.
+    run_plugin()
