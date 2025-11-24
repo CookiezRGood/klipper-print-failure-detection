@@ -1,48 +1,47 @@
-const app = new Vue({
-    el: 'body',
-    data: {
-        cameraUrl: '',
-        ssimThreshold: 0.97,
-        stillnessThreshold: 0.20,
-        layerStep: 0.15,
-        failureStatus: 'Inactive'
-    },
-    mounted() {
-        this.fetchSettings();
-        this.fetchCameraSnapshot();
-        this.fetchFailureStatus();
-    },
-    methods: {
-        fetchSettings() {
-            fetch('/api/settings')
-                .then(response => response.json())
-                .then(data => {
-                    this.ssimThreshold = data.ssim_threshold;
-                    this.stillnessThreshold = data.stillness_threshold;
-                    this.layerStep = data.layer_min_step;
-                });
+// Function to update SSIM threshold from the slider
+function updateSSIMThreshold(value) {
+    document.getElementById('ssim-value').innerText = value;
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
         },
-        fetchCameraSnapshot() {
-            fetch('/api/camera_snapshot')
-                .then(response => response.json())
-                .then(data => {
-                    this.cameraUrl = data.snapshot_url;
-                    document.getElementById('camera-preview').src = this.cameraUrl;
-                });
+        body: JSON.stringify({
+            ssim_threshold: parseFloat(value)
+        })
+    });
+}
+
+// Function to toggle masking option
+function toggleMasking(isChecked) {
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
         },
-        fetchFailureStatus() {
-            fetch('/api/failure_status')
-                .then(response => response.json())
-                .then(data => {
-                    this.failureStatus = data.status;
-                    document.getElementById('failure-status').innerText = this.failureStatus;
-                });
-        },
-        pausePrint() {
-            fetch('/api/pause', { method: 'POST' });
-        },
-        cancelPrint() {
-            fetch('/api/cancel', { method: 'POST' });
-        }
-    }
-});
+        body: JSON.stringify({
+            dynamic_mask: isChecked
+        })
+    });
+}
+
+// Function to fetch camera feed
+function refreshCamera() {
+    fetch('/api/camera_snapshot')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('camera-preview').src = data.snapshot_url;
+        });
+}
+
+// Fetch and display current settings when page loads
+window.onload = function() {
+    fetch('/api/settings')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('ssim-threshold').value = data.ssim_threshold;
+            document.getElementById('ssim-value').innerText = data.ssim_threshold;
+            document.getElementById('mask-toggle').checked = data.dynamic_mask || false;
+            refreshCamera();
+        });
+}
