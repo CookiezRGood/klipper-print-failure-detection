@@ -10,29 +10,55 @@
     <div class="container">
         <header>
             <h2>Failure Detection</h2>
-            <div id="status-indicator" class="status-badge">Loading...</div>
+            <div id="status-indicator" class="status-badge">WAITING</div>
         </header>
+
         <div class="main-content">
             <div class="camera-section">
-                <h3>Live Monitor</h3>
+                <div class="camera-header">
+                    <h3>Live Monitor</h3>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="debug-toggle">
+                        <span class="slider"></span>
+                        <span class="label-text">Show Mask</span>
+                    </label>
+                </div>
+                
                 <div id="camera-container">
-                    <p>Waiting for camera...</p>
+                    <img id="live-image" class="live-feed" alt="Connecting..." />
                 </div>
             </div>
-            <div class="settings-section">
-                <h3>Settings</h3>
-                <div class="setting-row">
-                    <label>SSIM Threshold:</label>
-                    <input type="number" id="ssim_threshold" step="0.01" min="0" max="1">
-                </div>
-                <div class="setting-row">
-                    <label>Stillness Threshold:</label>
-                    <input type="number" id="stillness_threshold" step="0.01">
-                </div>
-                <button id="save-btn">Save Settings</button>
+
+            <div class="controls">
+                <button id="open-settings-btn" class="secondary-btn">⚙️ Settings</button>
             </div>
         </div>
     </div>
+
+    <dialog id="settings-modal">
+        <div class="modal-header">
+            <h3>Configuration</h3>
+            <button id="close-modal-x" class="icon-btn">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="setting-row">
+                <label>SSIM Threshold (0-1):</label>
+                <input type="number" id="ssim_threshold" step="0.01" min="0" max="1">
+            </div>
+            <div class="setting-row">
+                <label>Stillness Threshold:</label>
+                <input type="number" id="stillness_threshold" step="0.01">
+            </div>
+            <div class="setting-row">
+                <label>Check Interval (sec):</label>
+                <input type="number" id="check_interval" step="0.1">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="save-settings-btn" class="primary-btn">Save Changes</button>
+        </div>
+    </dialog>
+
     <script src="script.js"></script>
 </body>
 </html>
