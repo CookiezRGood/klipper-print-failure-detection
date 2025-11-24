@@ -145,9 +145,9 @@ def ssim(img1, img2):
     mu2_sq = mu2 * mu2
     mu1_mu2 = mu1 * mu2
 
-    sigma1_sq = cv2.GGaussianBlur(img1 * img1, (11,11), 1.5) - mu1_sq
-    sigma2_sq = cv2.GGaussianBlur(img2 * img2, (11,11), 1.5) - mu2_sq
-    sigma12   = cv2.GGaussianBlur(img1 * img2, (11,11), 1.5) - mu1_mu2
+    sigma1_sq = cv2.GaussianBlur(img1 * img1, (11,11), 1.5) - mu1_sq
+    sigma2_sq = cv2.GaussianBlur(img2 * img2, (11,11), 1.5) - mu2_sq
+    sigma12   = cv2.GaussianBlur(img1 * img2, (11,11), 1.5) - mu1_mu2
 
     numerator   = (2 * mu1_mu2 + C1) * (2 * sigma12 + C2)
     denominator = (mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2)
