@@ -2,14 +2,14 @@ import logging
 from flask import Flask, jsonify, request
 import threading
 
-# Set up logging
+# Set up logging to show info about the startup process
 logging.basicConfig(level=logging.INFO)
 logging.info("Starting the Print Failure Detection Plugin...")
 
-# Set up the Flask app
+# Initialize Flask app
 app = Flask(__name__)
 
-# Sample configuration
+# Sample plugin configuration
 current_config = {
     "ssim_threshold": 0.97,
     "stillness_threshold": 0.20,
@@ -17,7 +17,7 @@ current_config = {
     "camera_url": "http://192.168.10.153/webcam/?action=snapshot"
 }
 
-# API to get current settings
+# Endpoint to get current settings
 @app.route('/api/settings', methods=['GET', 'POST'])
 def settings():
     global current_config
@@ -27,21 +27,25 @@ def settings():
         current_config.update(data)
     return jsonify(current_config)
 
-# API to get failure detection status
+# Endpoint to get failure detection status
 @app.route('/api/failure_status', methods=['GET'])
 def failure_status():
-    # Return a dummy status (update this to reflect actual plugin state)
+    # Return a dummy status for now (you can update this with actual status)
     status = {
-        "status": "active"  # Change this based on actual plugin state
+        "status": "active"  # You can change this dynamically based on detection logic
     }
     return jsonify(status)
 
-# Function to run the Flask app
+# Function to run Flask in the background
 def run_plugin():
     logging.info("Running Flask app...")
-    app.run(host='0.0.0.0', port=7126)
+    app.run(host='0.0.0.0', port=7126, threaded=True)
 
-# Run the plugin in a separate thread
+# Start the Flask app in a separate thread
 plugin_thread = threading.Thread(target=run_plugin)
 plugin_thread.daemon = True
 plugin_thread.start()
+
+# Keep the main script running indefinitely (necessary to keep Flask running)
+while True:
+    pass
