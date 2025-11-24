@@ -1,87 +1,141 @@
+/* Mainsail-inspired Dark Theme */
 body {
-    background-color: #121212; /* Mainsail dark background */
+    background-color: #121212;
     color: #e0e0e0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     margin: 0;
     padding: 20px;
+    box-sizing: border-box;
 }
 
+/* Main Layout */
 .container {
-    max-width: 600px;
+    max-width: 800px;
     margin: 0 auto;
-    background-color: #1e1e1e;
-    padding: 20px;
+    background-color: #1e1e1e; /* Card background */
+    padding: 25px;
     border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
+/* Header Section */
 header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid #333;
     padding-bottom: 15px;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
 }
 
-h2, h3 { margin: 0; }
+h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #ffffff;
+}
 
+h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+    color: #b0b0b0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Status Badge */
 .status-badge {
-    background-color: #f39c12; /* Orange for loading */
+    background-color: #f39c12; /* Default Loading Orange */
     color: white;
-    padding: 5px 10px;
+    padding: 6px 12px;
     border-radius: 4px;
-    font-size: 0.9em;
+    font-size: 0.9rem;
     font-weight: bold;
+    text-transform: uppercase;
 }
 
-.setting-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 10px;
-    padding: 10px;
-    background-color: #2d2d2d;
-    border-radius: 4px;
+/* Camera Feed Section */
+.camera-section {
+    margin-bottom: 30px;
 }
-
-input {
-    background-color: #333;
-    border: 1px solid #444;
-    color: white;
-    padding: 5px;
-    border-radius: 4px;
-    width: 80px;
-    text-align: right;
-}
-
-button {
-    width: 100%;
-    padding: 10px;
-    background-color: #2196F3; /* Blue */
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1em;
-    margin-top: 10px;
-}
-
-button:hover { background-color: #1976D2; }
 
 #camera-container {
     width: 100%;
-    height: 300px;
+    height: 400px;
     background-color: #000;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 20px;
-    border-radius: 4px;
+    border-radius: 6px;
     overflow: hidden;
+    border: 1px solid #333;
 }
 
 img.live-feed {
     width: 100%;
     height: 100%;
     object-fit: contain;
+}
+
+/* Settings Section */
+.settings-section {
+    background-color: #252525;
+    padding: 20px;
+    border-radius: 6px;
+}
+
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 10px;
+    background-color: #2d2d2d;
+    border-radius: 4px;
+    border-left: 4px solid #2196F3; /* Blue accent on left */
+}
+
+label {
+    font-size: 0.95rem;
+    color: #e0e0e0;
+}
+
+input[type="number"] {
+    background-color: #333;
+    border: 1px solid #444;
+    color: white;
+    padding: 8px;
+    border-radius: 4px;
+    width: 80px;
+    text-align: center;
+    font-size: 1rem;
+}
+
+input[type="number"]:focus {
+    outline: none;
+    border-color: #2196F3;
+}
+
+/* Buttons */
+button {
+    width: 100%;
+    padding: 12px;
+    background-color: #2196F3; /* Mainsail Blue */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: background-color 0.2s ease;
+    margin-top: 10px;
+}
+
+button:hover {
+    background-color: #1976D2;
+}
+
+button:active {
+    transform: translateY(1px);
 }
