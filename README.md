@@ -15,7 +15,7 @@ This plugin uses image comparison (SSIM) to detect print failures. It is integra
 1. Clone this repository to your Raspberry Pi:
    ```bash
    cd ~/klipper/klippy/extras/
-   git clone https://github.com/CookiezRGood/klipper-print-failure-detection.git print_failure_detection
+   git clone https://github.com/CookiezRGood/klipper-print-failure-detection.git
    ```
 
 2. Run the installation script:
