@@ -4,49 +4,47 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Print Failure Detection</title>
+    <link rel="stylesheet" href="styles.css"> <!-- Optional: Custom CSS -->
 </head>
 <body>
-    <h1>Print Failure Detection Settings</h1>
+    <div class="plugin-container">
+        <h1>Print Failure Detection</h1>
 
-    <!-- Camera Snapshot -->
-    <div>
-        <h3>Camera Snapshot:</h3>
-        <img id="camera-preview" src="" alt="Camera Feed" width="320" height="240">
+        <!-- Camera Preview -->
+        <div class="camera-section">
+            <h2>Camera Preview</h2>
+            <img id="camera-preview" src="" alt="Camera Feed" width="320" height="240">
+            <button onclick="refreshCamera()">Refresh Camera</button>
+        </div>
+
+        <!-- Detection Status -->
+        <div class="status-section">
+            <h2>Status:</h2>
+            <p id="status">Waiting for detection...</p>
+        </div>
+
+        <!-- Settings: SSIM Threshold -->
+        <div class="settings-section">
+            <h2>Settings</h2>
+            <label for="ssim-threshold">SSIM Threshold:</label>
+            <input type="range" id="ssim-threshold" min="0" max="1" step="0.01" value="0.97" onchange="updateSSIMThreshold(this.value)">
+            <span id="ssim-value">0.97</span>
+        </div>
+
+        <!-- Masking Settings -->
+        <div class="masking-section">
+            <h2>Masking Options</h2>
+            <label for="mask-toggle">Enable Masking:</label>
+            <input type="checkbox" id="mask-toggle" onchange="toggleMasking(this.checked)">
+        </div>
+
+        <!-- Debugging and Updates -->
+        <div class="debug-section">
+            <h2>Debug</h2>
+            <button onclick="updatePluginSettings()">Save Settings</button>
+        </div>
     </div>
 
-    <!-- SSIM Threshold Slider -->
-    <div>
-        <h3>SSIM Threshold:</h3>
-        <input type="range" id="ssim-threshold" min="0" max="1" step="0.01" value="0.97">
-        <p>Current value: <span id="ssim-value">0.97</span></p>
-    </div>
-
-    <!-- Stillness Threshold Slider -->
-    <div>
-        <h3>Stillness Threshold:</h3>
-        <input type="range" id="stillness-threshold" min="0" max="1" step="0.05" value="0.20">
-        <p>Current value: <span id="stillness-value">0.20</span></p>
-    </div>
-
-    <!-- Layer Step Slider -->
-    <div>
-        <h3>Layer Step (Auto-calculated):</h3>
-        <input type="text" id="layer-step" value="0.15" readonly>
-    </div>
-
-    <!-- Status Display -->
-    <div>
-        <h3>Status:</h3>
-        <p id="failure-status">Fetching...</p>
-    </div>
-
-    <!-- Trigger Actions -->
-    <div>
-        <button onclick="pausePrint()">Pause Print</button>
-        <button onclick="cancelPrint()">Cancel Print</button>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js"></script> <!-- Link to JavaScript -->
 </body>
 </html>
