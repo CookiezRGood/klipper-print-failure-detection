@@ -1,15 +1,14 @@
-const REFRESH_RATE = 500; // Update image twice a second
+const REFRESH_RATE = 500; 
 
 const liveImage = document.getElementById('live-image');
 const debugToggle = document.getElementById('debug-toggle');
 const statusBadge = document.getElementById('status-indicator');
 const settingsModal = document.getElementById('settings-modal');
-
-// New UI Elements
 const ssimText = document.getElementById('ssim-val');
 const retryText = document.getElementById('retry-val');
 const confidenceBar = document.getElementById('confidence-bar');
 
+// Image Refresh Loop
 function refreshImage() {
     const timestamp = new Date().getTime();
     const endpoint = debugToggle.checked ? '/api/debug_frame' : '/api/latest_frame';
@@ -17,47 +16,48 @@ function refreshImage() {
 }
 setInterval(refreshImage, REFRESH_RATE);
 
-// Update Status & Health Bar
+// Status Loop
 async function updateStatus() {
     try {
         const res = await fetch('/api/status');
         const data = await res.json();
         
-        // 1. Update Status Badge
         statusBadge.innerText = data.status.toUpperCase();
-        if (data.status === 'failure_detected') statusBadge.style.backgroundColor = '#F44336'; // Red
-        else if (data.status === 'monitoring') statusBadge.style.backgroundColor = '#4CAF50'; // Green
-        else statusBadge.style.backgroundColor = '#f39c12'; // Orange/Checking
+        
+        if (data.status === 'failure_detected' || data.status === 'error') 
+            statusBadge.style.backgroundColor = '#F44336';
+        else if (data.status === 'monitoring') 
+            statusBadge.style.backgroundColor = '#4CAF50';
+        else if (data.status === 'connection_error')
+            statusBadge.style.backgroundColor = '#9E9E9E'; // Grey
+        else 
+            statusBadge.style.backgroundColor = '#f39c12';
 
-        // 2. Update Health Bar
         const ssimPercent = Math.round(data.ssim * 100);
         ssimText.innerText = `${ssimPercent}%`;
         retryText.innerText = `${data.failures}/${data.max_retries}`;
-
-        // Bar Length (SSIM)
         confidenceBar.style.width = `${ssimPercent}%`;
 
-        // Bar Color Logic
-        if (data.failures > 0) {
-            // If we are retrying, turn bar Orange/Red
-             confidenceBar.style.background = '#FF5722'; 
-        } else if (data.ssim < 0.90) {
-             confidenceBar.style.background = '#FFC107'; // Warning Yellow
-        } else {
-             confidenceBar.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)'; // Healthy Green
-        }
+        if (data.failures > 0) confidenceBar.style.background = '#FF5722'; 
+        else if (data.ssim < 0.90) confidenceBar.style.background = '#FFC107'; 
+        else confidenceBar.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
 
     } catch (e) { console.log("Status error", e); }
 }
 setInterval(updateStatus, 1000);
 
-// --- Settings Modal Logic ---
+// --- Settings Logic ---
 document.getElementById('open-settings-btn').addEventListener('click', async () => {
     const res = await fetch('/api/settings');
     const data = await res.json();
+    
+    // Fill inputs
+    document.getElementById('camera_url').value = data.camera_url;
+    document.getElementById('check_interval').value = data.check_interval;
     document.getElementById('ssim_threshold').value = data.ssim_threshold;
-    document.getElementById('mask_margin').value = data.mask_margin || 15;
-    document.getElementById('consecutive_failures').value = data.consecutive_failures || 3;
+    document.getElementById('mask_margin').value = data.mask_margin;
+    document.getElementById('consecutive_failures').value = data.consecutive_failures;
+    
     settingsModal.showModal();
 });
 
@@ -65,12 +65,19 @@ document.getElementById('close-modal-x').addEventListener('click', () => setting
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
     const payload = {
+        camera_url: document.getElementById('camera_url').value,
+        check_interval: parseFloat(document.getElementById('check_interval').value),
         ssim_threshold: parseFloat(document.getElementById('ssim_threshold').value),
         mask_margin: parseInt(document.getElementById('mask_margin').value),
         consecutive_failures: parseInt(document.getElementById('consecutive_failures').value)
     };
+    
     await fetch('/api/settings', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
     });
+    
+    alert("Configuration Saved!");
     settingsModal.close();
 });
