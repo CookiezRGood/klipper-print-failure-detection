@@ -77,9 +77,13 @@
             <div class="setting-group">
                 <h4>Detection Logic</h4>
                 <div class="setting-row">
-                    <label>Check Interval (s):</label>
-                    <input type="number" id="check_interval" step="0.1">
+                    <label>Check Interval (ms):</label>
+                    <input type="number" id="check_interval" step="50" min="50">
                 </div>
+                <p class="help-text">
+                    Note: To see smoother video, this must be equal to or lower than the UI Refresh Rate.
+                </p>
+
                 <div class="setting-row">
                     <label>SSIM Threshold:</label>
                     <input type="number" id="ssim_threshold" step="0.01" max="1">
