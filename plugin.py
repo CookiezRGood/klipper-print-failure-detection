@@ -6,7 +6,7 @@ import numpy as np
 import requests
 import json
 import os
-from flask import Flask, jsonify, request, Response, send_from_directory
+from flask import Flask, jsonify, request, Response
 
 # Import YOLO Engine
 try:
@@ -16,7 +16,7 @@ except ImportError:
     YOLO = None
 
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN: YOLOv8 AI <<<")
+logging.info(">>> STARTING PLUGIN: YOLOv8 AI (RETRY FIX) <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -26,9 +26,9 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.pt')
 default_config = {
     "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
     "moonraker_url": "http://127.0.0.1:7125",
-    "check_interval": 2000,     # AI takes ~500ms to run, so check every 2-5s
-    "ai_threshold": 0.50,       # Confidence threshold (0.0 - 1.0)
-    "consecutive_failures": 1,  # YOLO is accurate; 1 detection is usually enough
+    "check_interval": 2000,
+    "ai_threshold": 0.50,
+    "consecutive_failures": 1,
     "on_failure": "pause",
     "aspect_ratio": "16:9",
     "preview_refresh_rate": 500
@@ -49,7 +49,7 @@ def save_config_to_file():
 
 state = {
     "latest_frame": None,
-    "annotated_frame": None, # The image with AI boxes drawn
+    "annotated_frame": None,
     "status": "idle",
     "failure_score": 0.0,
     "failure_count": 0,
@@ -67,7 +67,6 @@ def load_model():
         return False
     
     try:
-        # Load model (optimized for CPU)
         logging.info("Loading YOLOv8 Model... (This may take 30s)")
         model = YOLO(MODEL_PATH, task='detect')
         logging.info("YOLOv8 Model Loaded Successfully.")
@@ -83,6 +82,7 @@ ai_ready = load_model()
 def action_start():
     state["monitoring_active"] = True
     state["failure_count"] = 0
+    state["action_triggered"] = False # Reset trigger so we can catch new failures
     logging.info("Monitoring STARTED")
     return jsonify({"success": True})
 
@@ -130,7 +130,6 @@ def background_monitor():
                 arr = np.frombuffer(resp.content, np.uint8)
                 img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                 state["latest_frame"] = img
-                # If not running AI, just show the raw frame
                 if not should_run:
                     state["annotated_frame"] = img
             else:
@@ -149,31 +148,26 @@ def background_monitor():
             state["status"] = "monitoring"
             
             if model:
-                # Run YOLO on the image
-                # conf=THRESHOLD: Only show boxes if confidence > user setting
                 user_conf = float(config.get("ai_threshold", 0.5))
-                
-                # verbose=False keeps the logs clean
                 results = model(state["latest_frame"], conf=user_conf, verbose=False)
                 result = results[0]
                 
-                # 1. Draw the boxes on a new image
-                # plot() returns the image with boxes drawn
                 state["annotated_frame"] = result.plot()
                 
-                # 2. Check for failures
-                # We count how many boxes it found. 0 boxes = Good. >0 boxes = Spaghetti.
                 box_count = len(result.boxes)
+                max_retries = int(config["consecutive_failures"])
                 
                 if box_count > 0:
-                    # Get the highest confidence score
                     top_conf = float(result.boxes.conf[0])
                     state["failure_score"] = top_conf
                     
-                    state["failure_count"] += 1
-                    logging.info(f"YOLO Alert: {box_count} objects detected. Confidence: {top_conf:.2f}")
+                    # --- FIX: Cap the failure count ---
+                    if state["failure_count"] < max_retries:
+                        state["failure_count"] += 1
                     
-                    if state["failure_count"] >= int(config["consecutive_failures"]):
+                    logging.info(f"YOLO Alert: {box_count} objects. Conf: {top_conf:.2f} | Count: {state['failure_count']}/{max_retries}")
+                    
+                    if state["failure_count"] >= max_retries:
                         state["status"] = "failure_detected"
                         trigger_printer_action()
                 else:
@@ -210,7 +204,6 @@ def get_status():
     })
 @app.route('/api/latest_frame')
 def latest_frame():
-    # Serve the ANNOTATED frame (with boxes)
     img = state["annotated_frame"] if state["annotated_frame"] is not None else np.zeros((360, 640, 3), np.uint8)
     _, buffer = cv2.imencode('.jpg', img)
     return Response(buffer.tobytes(), mimetype='image/jpeg')
