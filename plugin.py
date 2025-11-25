@@ -8,22 +8,14 @@ import json
 import os
 from flask import Flask, jsonify, request, Response, send_from_directory
 
-# --- LOGGING SETUP ---
-# 1. Silence the noisy HTTP server logs
-# This prevents the "GET /api/latest_frame 200" spam
-log = logging.getLogger('werkzeug')
-log.disabled = True
-
-# 2. Configure our main logger to show only Plugin info
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: SILENT MODE <<<")
-
-# Import YOLO Engine
 try:
     from ultralytics import YOLO
 except ImportError:
     logging.warning("CRITICAL: Ultralytics not found. AI will not work.")
     YOLO = None
+
+logging.basicConfig(level=logging.INFO)
+logging.info(">>> STARTING PLUGIN: SMART DECAY LOGIC <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -35,7 +27,7 @@ default_config = {
     "moonraker_url": "http://127.0.0.1:7125",
     "check_interval": 2000,
     "ai_threshold": 0.50,
-    "consecutive_failures": 1,
+    "consecutive_failures": 3, # Changed default to 3 for better smoothing
     "on_failure": "pause",
     "aspect_ratio": "16:9",
     "preview_refresh_rate": 500
@@ -74,7 +66,7 @@ def load_model():
         return False
     
     try:
-        logging.info("Loading YOLOv8 Model... (This may take 30s)")
+        logging.info("Loading YOLOv8 Model...")
         model = YOLO(MODEL_PATH, task='detect')
         logging.info("YOLOv8 Model Loaded Successfully.")
         return True
@@ -131,7 +123,6 @@ def background_monitor():
 
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
-            # Always fetch image
             resp = requests.get(config['camera_url'], timeout=2)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
@@ -156,29 +147,38 @@ def background_monitor():
             
             if model:
                 user_conf = float(config.get("ai_threshold", 0.5))
+                
+                # Run inference
                 results = model(state["latest_frame"], conf=user_conf, verbose=False)
                 result = results[0]
-                
                 state["annotated_frame"] = result.plot()
                 
                 box_count = len(result.boxes)
                 max_retries = int(config["consecutive_failures"])
                 
+                # --- SMART DECAY LOGIC ---
                 if box_count > 0:
+                    # FOUND SPAGHETTI -> Increment Count
                     top_conf = float(result.boxes.conf[0])
                     state["failure_score"] = top_conf
                     
-                    if state["failure_count"] < max_retries:
-                        state["failure_count"] += 1
-                    
-                    logging.info(f"YOLO Alert: {box_count} objects. Conf: {top_conf:.2f} | Count: {state['failure_count']}/{max_retries}")
-                    
-                    if state["failure_count"] >= max_retries:
-                        state["status"] = "failure_detected"
-                        trigger_printer_action()
+                    # Only increment if not already triggered
+                    if not state["action_triggered"]:
+                        if state["failure_count"] < max_retries:
+                            state["failure_count"] += 1
+                        
+                        logging.info(f"YOLO Alert: {box_count} objects. Conf: {top_conf:.2f} | Count: {state['failure_count']}/{max_retries}")
+                        
+                        if state["failure_count"] >= max_retries:
+                            state["status"] = "failure_detected"
+                            trigger_printer_action()
                 else:
+                    # NO SPAGHETTI -> Decrement Slowly
+                    # This prevents a single glitch frame from resetting the whole progress
                     state["failure_score"] = 0.0
-                    state["failure_count"] = 0
+                    if state["failure_count"] > 0:
+                        state["failure_count"] -= 1
+                        logging.info(f"Threat clearing... Count decayed to {state['failure_count']}/{max_retries}")
 
         except Exception as e:
             logging.error(f"Loop Error: {e}")
@@ -188,7 +188,7 @@ def background_monitor():
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
-# Routes
+# Routes (Unchanged)
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 @app.route('/<path:path>')
