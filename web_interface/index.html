@@ -24,14 +24,14 @@
                     </label>
                 </div>
                 <div id="camera-container">
-                    <img id="live-image" class="live-feed" alt="Waiting for signal..." />
+                    <img id="live-image" class="live-feed" alt="Waiting..." />
                 </div>
             </div>
 
             <div class="health-section">
                 <div class="health-header">
                     <span>Confidence: <span id="ssim-val">--%</span></span>
-                    <span>Retries: <span id="retry-val">0/3</span></span>
+                    <span>Retries: <span id="retry-val">0/0</span></span>
                 </div>
                 <div class="progress-track">
                     <div id="confidence-bar" class="progress-fill"></div>
@@ -46,37 +46,55 @@
 
     <dialog id="settings-modal">
         <div class="modal-header">
-            <h3>Plugin Configuration</h3>
+            <h3>Configuration</h3>
             <button id="close-modal-x" class="icon-btn">×</button>
         </div>
         <div class="modal-body">
+            
             <div class="setting-group">
-                <h4>Camera & Performance</h4>
+                <h4>Connections</h4>
                 <div class="setting-row">
-                    <label>Camera URL (Snapshot):</label>
-                    <input type="text" id="camera_url" placeholder="http://...">
+                    <label>Camera URL:</label>
+                    <input type="text" id="camera_url">
                 </div>
                 <div class="setting-row">
-                    <label>Check Interval (seconds):</label>
-                    <input type="number" id="check_interval" step="0.1">
+                    <label>Moonraker URL:</label>
+                    <input type="text" id="moonraker_url" placeholder="http://127.0.0.1:7125">
                 </div>
             </div>
 
             <div class="setting-group">
                 <h4>Detection Logic</h4>
                 <div class="setting-row">
-                    <label>SSIM Threshold (0.0 - 1.0):</label>
-                    <input type="number" id="ssim_threshold" step="0.01" min="0" max="1">
+                    <label>Check Interval (s):</label>
+                    <input type="number" id="check_interval" step="0.1">
+                </div>
+                <div class="setting-row">
+                    <label>SSIM Threshold:</label>
+                    <input type="number" id="ssim_threshold" step="0.01" max="1">
                 </div>
                 <div class="setting-row">
                     <label>Mask Margin (px):</label>
                     <input type="number" id="mask_margin" step="1">
                 </div>
+            </div>
+
+            <div class="setting-group">
+                <h4>Actions</h4>
                 <div class="setting-row">
                     <label>Max Retries:</label>
                     <input type="number" id="consecutive_failures" step="1">
                 </div>
+                <div class="setting-row">
+                    <label>On Failure:</label>
+                    <select id="on_failure">
+                        <option value="nothing">Do Nothing (Log Only)</option>
+                        <option value="pause">Pause Print</option>
+                        <option value="cancel">Cancel Print</option>
+                    </select>
+                </div>
             </div>
+
         </div>
         <div class="modal-footer">
             <button id="save-settings-btn" class="primary-btn">Save Configuration</button>
