@@ -14,7 +14,7 @@ except ImportError:
     def ssim(img1, img2): return 1.0
 
 logging.basicConfig(level=logging.INFO)
-logging.info("Starting Print Failure Detection Plugin...")
+logging.info(">>> STARTING PLUGIN WITH STICKY REFERENCE LOGIC <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -24,7 +24,7 @@ default_config = {
     "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
     "moonraker_url": "http://127.0.0.1:7125", 
     "check_interval": 0.5,
-    "ssim_threshold": 0.90,
+    "ssim_threshold": 0.85,     # Slightly lower to allow for head position variance
     "mask_margin": 15,
     "max_mask_percent": 0.25,
     "consecutive_failures": 3,
@@ -49,21 +49,18 @@ state = {
     "debug_frame": None,
     "status": "idle",
     "previous_gray": None,
-    "last_stable_frame": None,
+    "last_stable_frame": None,  # The "Golden Standard" image
     "current_ssim": 1.0,
     "failure_count": 0,
     "action_triggered": False 
 }
 
-# --- HELPER: GET KLIPPER STATUS ---
 def get_printer_state():
     url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
     try:
-        # We ask Moonraker for the print_stats
         r = requests.get(f"{url}/printer/objects/query?print_stats", timeout=0.5)
         if r.status_code == 200:
             data = r.json()
-            # Returns: 'standby', 'printing', 'paused', 'complete', 'error'
             return data.get("result", {}).get("status", {}).get("print_stats", {}).get("state", "standby")
     except Exception:
         pass
@@ -75,7 +72,7 @@ def trigger_printer_action():
     action = config.get("on_failure", "nothing")
     url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
     
-    log_info(f"FAILURE CONFIRMED. Executing action: {action}")
+    logging.info(f"FAILURE CONFIRMED. Executing action: {action}")
 
     try:
         console_msg = f"M118 >>> FAILURE DETECTED! Action: {action.upper()} <<<"
@@ -89,30 +86,35 @@ def trigger_printer_action():
         state["action_triggered"] = True
         
     except Exception as e:
-        log_info(f"Failed to send command to Moonraker: {e}")
+        logging.info(f"Failed to send command to Moonraker: {e}")
 
 def background_monitor():
-    log_info("Background monitor started.")
+    logging.info("Background monitor started.")
     
     while True:
         try:
-            # 1. Check Klipper State First
+            # 1. CHECK IDLE STATE
             klipper_state = get_printer_state()
             
-            # If NOT printing (and not paused), just show IDLE
+            # Reset everything if we aren't printing
             if klipper_state not in ["printing", "paused"]:
                 state["status"] = "idle"
-                # Still fetch the image so the UI works, but skip detection logic
+                state["last_stable_frame"] = None # Reset reference for next print
+                state["failure_count"] = 0
+                state["action_triggered"] = False
+                
+                # Still fetch image for UI
                 resp = requests.get(config['camera_url'], timeout=2)
                 if resp.status_code == 200:
                     arr = np.frombuffer(resp.content, np.uint8)
                     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                     state["latest_frame"] = img
                     state["debug_frame"] = img
-                time.sleep(1) # Sleep longer when idle
-                continue
+                
+                time.sleep(1) 
+                continue 
 
-            # 2. If Printing, Run Logic
+            # 2. RUN DETECTION
             dilate_kernel = np.ones((int(config['mask_margin']), int(config['mask_margin'])), np.uint8)
             resp = requests.get(config['camera_url'], timeout=2)
             
@@ -127,7 +129,8 @@ def background_monitor():
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
-                if state["previous_gray"] is None:
+                # Initialize Reference on First Frame of Print
+                if state["previous_gray"] is None or state["last_stable_frame"] is None:
                     state["previous_gray"] = gray
                     state["last_stable_frame"] = gray
                     time.sleep(1)
@@ -138,13 +141,13 @@ def background_monitor():
                 mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
                 mask_coverage = cv2.countNonZero(mask_dilated) / (height * width)
 
-                # MOTION
+                # --- MOTION DETECTED ---
                 if mask_coverage > 0.001:
                     state["status"] = "monitoring"
-                    state["current_ssim"] = 1.0
-                    state["failure_count"] = 0
-                    state["action_triggered"] = False
-                    state["last_stable_frame"] = gray 
+                    state["current_ssim"] = 1.0 # Motion implies valid activity
+                    # CRITICAL FIX: DO NOT RESET FAILURE COUNT HERE
+                    # CRITICAL FIX: DO NOT UPDATE 'last_stable_frame' HERE
+                    # We simply wait for the motion to stop to verify the print.
                     
                     contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     if contours:
@@ -155,39 +158,57 @@ def background_monitor():
                             x, y, w, h = cv2.boundingRect(c)
                             cv2.putText(debug_img, "Motion", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-                # STILL
+                # --- STILL (CHECKING) ---
                 else:
                     if state["last_stable_frame"] is not None:
+                        # Compare Current View vs The Last Known GOOD View
                         score = ssim(gray, state["last_stable_frame"])
                         state["current_ssim"] = score
+                        threshold = float(config["ssim_threshold"])
 
-                        if score < float(config["ssim_threshold"]):
+                        # A. MATCH (Evolution)
+                        if score >= threshold:
+                            # The print looks mostly the same (or grew slightly).
+                            # This is a valid state. Update the reference.
+                            state["failure_count"] = 0
+                            state["status"] = "checking"
+                            state["last_stable_frame"] = gray # <--- UPDATE REFERENCE HERE ONLY
+                            
+                            cv2.putText(debug_img, f"MATCH: {int(score*100)}%", (10, 30), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+                        # B. MISMATCH (Revolution/Failure)
+                        else:
+                            # The print changed TOO much (e.g. part disappeared).
+                            # DO NOT UPDATE REFERENCE. Keep comparing to the old good image.
                             if state["failure_count"] < int(config["consecutive_failures"]):
                                 state["failure_count"] += 1
+                            
+                            logging.info(f"Mismatch detected! Score: {score:.2f}. Retries: {state['failure_count']}")
                             
                             if state["failure_count"] >= int(config["consecutive_failures"]):
                                 state["status"] = "failure_detected"
                                 trigger_printer_action()
-                        else:
-                            state["failure_count"] = 0
-                            state["status"] = "checking"
-                            state["last_stable_frame"] = gray 
+                            
+                            # Visual Debug for Mismatch
+                            cv2.putText(debug_img, f"MISMATCH: {int(score*100)}%", (10, 30), 
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
                 state["previous_gray"] = gray
                 state["debug_frame"] = debug_img
             else:
                 state["status"] = "camera_error"
 
-        except Exception:
+        except Exception as e:
             state["status"] = "connection_error"
+            logging.error(f"Loop Error: {e}")
         
         time.sleep(float(config["check_interval"]))
-
-def log_info(msg): logging.info(msg)
 
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
+# --- ROUTES (Unchanged) ---
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 
