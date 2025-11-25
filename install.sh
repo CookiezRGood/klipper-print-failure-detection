@@ -1,58 +1,52 @@
 #!/bin/bash
 
-# Get the absolute path of the directory where this script is located
-PLUGIN_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-VENV_DIR="$PLUGIN_DIR/venv"
-USER=$(whoami)
-
-echo "Installing Klipper Print Failure Detection..."
-echo "Detected Installation Directory: $PLUGIN_DIR"
-
-# 1. Install System Dependencies
-echo "Installing system dependencies..."
-sudo apt-get update
-sudo apt-get install -y python3-opencv python3-venv libopenjp2-7
-
-# 2. Create Python Virtual Environment
-if [ ! -d "$VENV_DIR" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv "$VENV_DIR"
+# --- 1. SETUP ---
+# Identify the non-root user who ran the script via sudo
+if [ -z "$SUDO_USER" ]; then
+    echo "Error: This script must be run using sudo, and the user must be defined."
+    exit 1
 fi
+KLIPPER_USER="$SUDO_USER"
+PLUGIN_DIR=$(pwd)
+SERVICE_NAME="failure_detection"
 
-# 3. Install Python Requirements
-echo "Installing Python requirements..."
-"$VENV_DIR/bin/pip" install -r requirements.txt
+# --- 2. Install Python Dependencies ---
+echo "Installing required Python dependencies..."
+# Run pip as the non-root user to install into their environment/venv
+sudo -u "$KLIPPER_USER" "$PLUGIN_DIR/venv/bin/pip" install -r "$PLUGIN_DIR/requirements.txt"
 
-# 4. Create Systemd Service
-# We use the $PLUGIN_DIR variable to tell the service exactly where your files are.
-echo "Creating system service..."
-SERVICE_FILE="/etc/systemd/system/failure_detection.service"
+# --- 3. Permissions Guarantee (THE FIX) ---
+echo "Guarding against file permission errors..."
+# This is the critical step: ensures the entire plugin directory and all contents 
+# are owned by the Klipper user. This allows the plugin to create 'user_settings.json'.
+chown -R "$KLIPPER_USER":"$KLIPPER_USER" "$PLUGIN_DIR"
 
-sudo bash -c "cat > $SERVICE_FILE" <<EOL
+# --- 4. Service File Creation (Ensures correct User setting) ---
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+
+echo "Creating Systemd service file..."
+sudo bash -c "cat > $SERVICE_FILE <<EOF
 [Unit]
 Description=Klipper Print Failure Detection Plugin
 After=network.target
 
 [Service]
 Type=simple
-User=$USER
+User=$KLIPPER_USER
+# Assumes venv is created in the standard location
+ExecStart=$PLUGIN_DIR/venv/bin/python $PLUGIN_DIR/plugin.py
 WorkingDirectory=$PLUGIN_DIR
-ExecStart=$VENV_DIR/bin/python plugin.py
 Restart=always
-RestartSec=5
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-EOL
+EOF"
 
-# 5. Enable and Start the Service
+# --- 5. Enable and Start Service ---
 echo "Enabling and starting service..."
-sudo systemctl daemon-reload
-sudo systemctl enable failure_detection.service
-sudo systemctl restart failure_detection.service
+systemctl daemon-reload
+systemctl enable "$SERVICE_NAME".service
+systemctl start "$SERVICE_NAME".service
 
-echo "--------------------------------------------------"
-echo "Installation Complete!"
-echo "Service is running from: $PLUGIN_DIR"
-echo "Access the UI at: http://<your-printer-ip>:7126"
-echo "--------------------------------------------------"
+echo "Installation complete! The plugin should now be running."
