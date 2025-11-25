@@ -1,7 +1,6 @@
 let imageInterval; 
 
 const liveImage = document.getElementById('live-image');
-const debugToggle = document.getElementById('debug-toggle');
 const statusBadge = document.getElementById('status-indicator');
 const settingsModal = document.getElementById('settings-modal');
 const ssimText = document.getElementById('ssim-val');
@@ -10,38 +9,38 @@ const confidenceBar = document.getElementById('confidence-bar');
 const camContainer = document.getElementById('camera-container');
 const forceStartBtn = document.getElementById('force-start-btn');
 
-// Helper: Start the image refresh loop
+// --- IMAGE LOOP ---
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
     const safeRate = (rate && rate >= 100) ? rate : 500;
     
     imageInterval = setInterval(() => {
         const timestamp = new Date().getTime();
-        const endpoint = debugToggle.checked ? '/api/debug_frame' : '/api/latest_frame';
+        // AI mode always uses the same endpoint (no debug mask toggle needed)
+        const endpoint = '/api/latest_frame'; 
         liveImage.src = `${endpoint}?t=${timestamp}`;
     }, safeRate);
 }
 
 startImageLoop(500);
 
-// Helper: Manage Button Visuals
+// --- BUTTON VISUALS ---
 function setButtonState(mode) {
-    // Clear all state classes
     forceStartBtn.classList.remove('btn-success', 'btn-danger', 'btn-primary');
     
     if (mode === 'start') {
         forceStartBtn.innerText = "▶ Start Monitoring";
-        forceStartBtn.classList.add('btn-success'); // Green
-        forceStartBtn.dataset.action = "start";     // Logic flag
+        forceStartBtn.classList.add('btn-success'); 
+        forceStartBtn.dataset.action = "start";
         forceStartBtn.style.display = 'inline-block';
     } else if (mode === 'stop') {
         forceStartBtn.innerText = "■ Stop Monitoring";
-        forceStartBtn.classList.add('btn-danger');  // Red
-        forceStartBtn.dataset.action = "stop";      // Logic flag
+        forceStartBtn.classList.add('btn-danger'); 
+        forceStartBtn.dataset.action = "stop";
         forceStartBtn.style.display = 'inline-block';
     } else if (mode === 'force') {
         forceStartBtn.innerText = "▶ Force Start";
-        forceStartBtn.classList.add('btn-primary'); // Blue
+        forceStartBtn.classList.add('btn-primary'); 
         forceStartBtn.dataset.action = "start";
         forceStartBtn.style.display = 'inline-block';
     } else {
@@ -49,7 +48,7 @@ function setButtonState(mode) {
     }
 }
 
-// Main Status Loop
+// --- STATUS LOOP ---
 async function updateStatus() {
     try {
         const res = await fetch('/api/status');
@@ -58,23 +57,16 @@ async function updateStatus() {
         const statusText = data.status.toUpperCase().replace('_', ' ');
         statusBadge.innerText = statusText;
         
-        // Update Badge Color & Button State
+        // Badge Color & Button Logic
         if (data.status === 'failure_detected' || data.status === 'error') {
             statusBadge.style.backgroundColor = '#F44336'; 
             setButtonState('stop');
-
-        } else if (data.status === 'monitoring' || data.status === 'checking') {
+        } else if (data.status === 'monitoring') {
             statusBadge.style.backgroundColor = '#4CAF50'; 
             setButtonState('stop');
-            
         } else if (data.status === 'idle') {
             statusBadge.style.backgroundColor = '#555555'; 
             setButtonState('start');
-
-        } else if (data.status === 'awaiting_macro') {
-            statusBadge.style.backgroundColor = '#2196F3'; 
-            setButtonState('force');
-            
         } else if (data.status === 'connection_error') {
             statusBadge.style.backgroundColor = '#9E9E9E'; 
             setButtonState('hide');
@@ -82,25 +74,27 @@ async function updateStatus() {
             statusBadge.style.backgroundColor = '#f39c12'; 
         }
 
-        // Update Bars
-        const ssimPercent = Math.round(data.ssim * 100);
-        ssimText.innerText = `${ssimPercent}%`;
+        // AI BAR LOGIC (Inverted: 0% is Good, 100% is Bad)
+        const failPercent = Math.round(data.score * 100);
+        ssimText.innerText = `${failPercent}%`;
         retryText.innerText = `${data.failures}/${data.max_retries}`;
-        confidenceBar.style.width = `${ssimPercent}%`;
+        confidenceBar.style.width = `${failPercent}%`;
 
-        if (data.failures > 0) confidenceBar.style.background = '#FF5722'; 
-        else if (data.ssim < 0.90) confidenceBar.style.background = '#FFC107'; 
-        else confidenceBar.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+        if (data.failures > 0) {
+             confidenceBar.style.background = '#FF5722'; // Warning
+        } else if (failPercent > 50) {
+             confidenceBar.style.background = '#FFC107'; // Yellow (Caution)
+        } else {
+             confidenceBar.style.background = '#4CAF50'; // Green (Safe)
+        }
 
     } catch (e) { console.log("Status error", e); }
 }
 setInterval(updateStatus, 1000);
 
-// --- FIXED BUTTON CLICK HANDLER ---
+// --- BUTTON CLICK ---
 forceStartBtn.addEventListener('click', async () => {
-    const action = forceStartBtn.dataset.action; // Read the logic flag we set earlier
-    
-    // Use POST to prevent caching
+    const action = forceStartBtn.dataset.action;
     const method = { method: 'POST' };
     
     try {
@@ -109,14 +103,11 @@ forceStartBtn.addEventListener('click', async () => {
         } else {
             await fetch('/api/action/start', method);
         }
-        // Force an immediate status update so UI feels snappy
         setTimeout(updateStatus, 100); 
-    } catch (e) {
-        console.error("Failed to toggle monitoring", e);
-    }
+    } catch (e) { console.error(e); }
 });
 
-// --- SETTINGS (Unchanged) ---
+// --- SETTINGS ---
 document.getElementById('open-settings-btn').addEventListener('click', async () => {
     const res = await fetch('/api/settings');
     const data = await res.json();
@@ -124,8 +115,8 @@ document.getElementById('open-settings-btn').addEventListener('click', async () 
     document.getElementById('camera_url').value = data.camera_url;
     document.getElementById('moonraker_url').value = data.moonraker_url || "http://127.0.0.1:7125";
     document.getElementById('check_interval').value = data.check_interval;
-    document.getElementById('ssim_threshold').value = data.ssim_threshold;
-    document.getElementById('mask_margin').value = data.mask_margin;
+    // Use AI Threshold
+    document.getElementById('ai_threshold').value = data.ai_threshold || 0.6;
     document.getElementById('consecutive_failures').value = data.consecutive_failures;
     document.getElementById('on_failure').value = data.on_failure || "nothing";
     document.getElementById('aspect_ratio').value = data.aspect_ratio || "16:9";
@@ -144,8 +135,8 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         camera_url: document.getElementById('camera_url').value,
         moonraker_url: document.getElementById('moonraker_url').value,
         check_interval: parseInt(document.getElementById('check_interval').value),
-        ssim_threshold: parseFloat(document.getElementById('ssim_threshold').value),
-        mask_margin: parseInt(document.getElementById('mask_margin').value),
+        // Save AI Threshold
+        ai_threshold: parseFloat(document.getElementById('ai_threshold').value),
         consecutive_failures: parseInt(document.getElementById('consecutive_failures').value),
         on_failure: document.getElementById('on_failure').value,
         aspect_ratio: document.getElementById('aspect_ratio').value,
@@ -160,7 +151,6 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     
     camContainer.style.aspectRatio = payload.aspect_ratio.replace(':', '/');
     startImageLoop(newRate); 
-    
     alert("Configuration Saved!");
     settingsModal.close();
 });
