@@ -12,22 +12,19 @@ from flask import Flask, jsonify, request, send_from_directory, Response
 try:
     from core.detection import ssim
 except ImportError:
-    # Fallback if core folder is missing
     def ssim(img1, img2): return 1.0
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN: DOUBLE BLIND + MANUAL OVERRIDE <<<")
+logging.info(">>> STARTING PLUGIN: TEMPLATE MATCHING <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
-# --- CONFIGURATION ---
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 
 default_config = {
     "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
     "moonraker_url": "http://127.0.0.1:7125",
-    "check_interval": 500,
+    "check_interval": 200,
     "ssim_threshold": 0.85,
     "mask_margin": 20,
     "max_mask_percent": 0.25,
@@ -37,13 +34,11 @@ default_config = {
     "preview_refresh_rate": 500
 }
 
-# Load Settings
 config = default_config.copy()
 if os.path.exists(SETTINGS_FILE):
     try:
         with open(SETTINGS_FILE, 'r') as f:
             loaded = json.load(f)
-            # Migration: Check if interval is in seconds (<10) and convert to ms
             if "check_interval" in loaded and float(loaded["check_interval"]) < 10:
                 loaded["check_interval"] = int(float(loaded["check_interval"]) * 1000)
             config.update(loaded)
@@ -55,34 +50,37 @@ def save_config_to_file():
             json.dump(config, f, indent=4)
     except Exception: pass
 
-# --- GLOBAL STATE ---
 state = {
     "latest_frame": None,
     "debug_frame": None,
     "status": "idle",
     "previous_gray": None,
     
-    # Double Blind State Variables
-    "last_stable_frame": None,  # The Reference Image
-    "ref_mask": None,           # The Mask for the Reference Image
-    "active_mask": None,        # The Mask for the Current Image
+    "last_stable_frame": None,
+    "ref_mask": None,
+    "active_mask": None,
+    
+    # TEMPLATE MATCHING STATE
+    "toolhead_template": None,  # The saved image of the toolhead
+    "template_bbox": None,      # (x, y, w, h) of the template
     
     "current_ssim": 1.0,
     "failure_count": 0,
     "action_triggered": False,
-    "monitoring_active": False  # Controls Macro/Manual Start
+    "monitoring_active": False 
 }
 
-# --- API ROUTES FOR TRIGGERS ---
+# --- API TRIGGERS ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
-    # Reset reference so we start fresh
+    # Reset all learning
     state["last_stable_frame"] = None 
     state["ref_mask"] = None
     state["active_mask"] = None
+    state["toolhead_template"] = None
     state["failure_count"] = 0
-    logging.info("Signal Received: Monitoring STARTED")
+    logging.info("Signal Received: Monitoring STARTED (Learning Mode)")
     return jsonify({"success": True})
 
 @app.route('/api/action/stop', methods=['POST', 'GET'])
@@ -91,7 +89,6 @@ def action_stop():
     logging.info("Signal Received: Monitoring STOPPED")
     return jsonify({"success": True})
 
-# --- HELPER FUNCTIONS ---
 def get_printer_state():
     url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
     try:
@@ -112,7 +109,6 @@ def trigger_printer_action():
     logging.info(f"FAILURE CONFIRMED. Executing action: {action}")
 
     try:
-        # Always log to console
         console_msg = f"M118 >>> FAILURE DETECTED! Action: {action.upper()} <<<"
         requests.post(f"{url}/printer/gcode/script", json={"script": console_msg})
 
@@ -126,7 +122,6 @@ def trigger_printer_action():
     except Exception as e:
         logging.info(f"Failed to send command to Moonraker: {e}")
 
-# --- MAIN LOOP ---
 def background_monitor():
     logging.info("Background monitor started.")
     
@@ -134,25 +129,18 @@ def background_monitor():
         try:
             klipper_state = get_printer_state()
             
-            # 1. AUTO-RESET ON COMPLETION
-            # If the print finishes or cancels, we turn off monitoring automatically.
             if klipper_state in ["complete", "error", "cancelled"]:
                 state["monitoring_active"] = False
 
-            # 2. DETERMINE IF WE SHOULD RUN
-            # We run if the printer is printing/paused OR if the user Manually Started it.
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
             if not should_run:
-                # --- IDLE STATE ---
                 state["status"] = "idle"
                 state["last_stable_frame"] = None 
-                state["ref_mask"] = None
-                state["active_mask"] = None
                 state["failure_count"] = 0
+                state["toolhead_template"] = None
                 state["action_triggered"] = False
                 
-                # Fetch image for UI only
                 resp = requests.get(config['camera_url'], timeout=2)
                 if resp.status_code == 200:
                     arr = np.frombuffer(resp.content, np.uint8)
@@ -163,26 +151,21 @@ def background_monitor():
                 time.sleep(1) 
                 continue 
 
-            # 3. AWAITING TRIGGER (Printing but not Active)
             if not state["monitoring_active"]:
                 state["status"] = "awaiting_macro"
-                
                 resp = requests.get(config['camera_url'], timeout=2)
                 if resp.status_code == 200:
                     arr = np.frombuffer(resp.content, np.uint8)
                     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                    
                     debug_img = img.copy()
                     cv2.putText(debug_img, "WAITING FOR START SIGNAL...", (20, 50), 
                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 165, 0), 2)
-                    
                     state["latest_frame"] = img
                     state["debug_frame"] = debug_img
-                
                 time.sleep(1)
                 continue
 
-            # 4. ACTIVE DETECTION
+            # --- ACTIVE DETECTION ---
             dilate_kernel = np.ones((int(config['mask_margin']), int(config['mask_margin'])), np.uint8)
             resp = requests.get(config['camera_url'], timeout=2)
             
@@ -195,76 +178,125 @@ def background_monitor():
                 height, width = img.shape[:2]
 
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                gray = cv2.GaussianBlur(gray, (21, 21), 0)
+                # Less blur for template matching to preserve details
+                gray_sharp = cv2.GaussianBlur(gray, (5, 5), 0) 
+                gray = cv2.GaussianBlur(gray, (21, 21), 0) # Keep heavy blur for motion
 
-                # Initialize Previous Frame logic
                 if state["previous_gray"] is None:
                     state["previous_gray"] = gray
                     time.sleep(0.1)
                     continue
 
-                # Motion Calculation
                 frame_delta = cv2.absdiff(state["previous_gray"], gray)
                 thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
                 mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
                 mask_coverage = cv2.countNonZero(mask_dilated) / (height * width)
 
-                # Initialize Reference if missing
                 if state["last_stable_frame"] is None:
                     state["last_stable_frame"] = gray
-                    state["ref_mask"] = np.zeros_like(gray) # Start with empty mask
+                    state["ref_mask"] = np.zeros_like(gray)
                     state["previous_gray"] = gray
                     continue
 
-                # --- IS MOVING? ---
+                # --- MOTION DETECTED ---
                 if mask_coverage > 0.001:
                     state["status"] = "monitoring"
                     state["current_ssim"] = 1.0 
                     
-                    # Save the active mask (Where the head IS)
-                    state["active_mask"] = mask_dilated.copy()
+                    # 1. Capture potential mask from motion
+                    temp_active_mask = mask_dilated.copy()
+                    
+                    # 2. Find the bounding box of this motion
+                    contours, _ = cv2.findContours(temp_active_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    
+                    valid_toolhead = False
+                    
+                    if contours:
+                        # Find the largest moving object
+                        c = max(contours, key=cv2.contourArea)
+                        x, y, w, h = cv2.boundingRect(c)
+                        
+                        # A. LEARN PHASE: If no template exists, assume this first motion IS the toolhead
+                        if state["toolhead_template"] is None:
+                            if w > 20 and h > 20: # Ignore tiny noise
+                                state["toolhead_template"] = gray_sharp[y:y+h, x:x+w].copy()
+                                state["template_bbox"] = (w, h)
+                                valid_toolhead = True
+                                cv2.putText(debug_img, "LEARNING TOOLHEAD...", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                        
+                        # B. SEARCH PHASE: Look for the known template in the current frame
+                        else:
+                            try:
+                                res = cv2.matchTemplate(gray_sharp, state["toolhead_template"], cv2.TM_CCOEFF_NORMED)
+                                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+                                
+                                # max_val is the score (0.0 to 1.0)
+                                # If match > 0.6, we found the toolhead!
+                                if max_val > 0.6:
+                                    valid_toolhead = True
+                                    
+                                    # Draw box where we found it
+                                    top_left = max_loc
+                                    tw, th = state["template_bbox"]
+                                    cv2.rectangle(debug_img, top_left, (top_left[0] + tw, top_left[1] + th), (0, 255, 0), 2)
+                                    cv2.putText(debug_img, f"TOOLHEAD FOUND ({max_val:.2f})", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                                    
+                                    # EVOLUTION: Update template slightly to adapt to Z-height changes or angles
+                                    # We blend 95% old template with 5% new image
+                                    new_crop = gray_sharp[top_left[1]:top_left[1]+th, top_left[0]:top_left[0]+tw]
+                                    if new_crop.shape == state["toolhead_template"].shape:
+                                        cv2.addWeighted(state["toolhead_template"], 0.95, new_crop, 0.05, 0, state["toolhead_template"])
+                                    
+                                    # REGENERATE MASK based on where we found it (Precise Masking)
+                                    # Instead of using the messy motion blob, we mask exactly where the template matched
+                                    clean_mask = np.zeros_like(mask_dilated)
+                                    cv2.rectangle(clean_mask, top_left, (top_left[0] + tw, top_left[1] + th), 255, -1)
+                                    # Dilate slightly for safety margin
+                                    temp_active_mask = cv2.dilate(clean_mask, dilate_kernel, iterations=1)
 
-                    # Draw Motion
-                    contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                    cv2.drawContours(debug_img, contours, -1, (0, 255, 0), 2)
-                    cv2.putText(debug_img, "Motion Tracking...", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                                else:
+                                    cv2.putText(debug_img, f"UNKNOWN OBJECT ({max_val:.2f})", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                            except Exception:
+                                pass
 
-                # --- IS STILL? ---
+                    # 3. Commit the Mask if Valid
+                    if valid_toolhead:
+                        state["active_mask"] = temp_active_mask
+                    else:
+                        # If it's not the toolhead (e.g. hand), we DO NOT mask it.
+                        # Ideally, we want to clear it so the Intruder is exposed.
+                        pass 
+
+                # --- STILL (CHECKING) ---
                 else:
                     state["status"] = "checking"
 
                     if state["active_mask"] is None:
                         state["active_mask"] = np.zeros_like(gray)
                     
-                    # DOUBLE BLIND MASKING
-                    # Combine Current Mask + Old Reference Mask
+                    # Double Blind Masking
                     combined_mask = cv2.bitwise_or(state["active_mask"], state["ref_mask"])
                     
-                    # Black out head in BOTH images
                     gray_masked = gray.copy()
                     ref_masked = state["last_stable_frame"].copy()
                     gray_masked[combined_mask > 0] = 0
                     ref_masked[combined_mask > 0] = 0
 
-                    # Compare what's left (The Bed)
                     score = ssim(gray_masked, ref_masked)
                     state["current_ssim"] = score
                     threshold = float(config["ssim_threshold"])
 
                     if score >= threshold:
-                        # MATCH (Valid Evolution)
+                        # Match
                         state["failure_count"] = 0
-                        
-                        # Update Reference to this new state
                         state["last_stable_frame"] = gray 
                         state["ref_mask"] = state["active_mask"].copy() 
                         
-                        # Debug overlay
                         debug_img[combined_mask > 0] = 0 
                         cv2.putText(debug_img, f"MATCH: {int(score*100)}%", (10, 30), 
                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     else:
-                        # MISMATCH (Potential Failure)
+                        # Mismatch
                         if state["failure_count"] < int(config["consecutive_failures"]):
                             state["failure_count"] += 1
                         
