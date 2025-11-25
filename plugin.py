@@ -6,7 +6,7 @@ import numpy as np
 import requests
 import json
 import os
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request, Response, send_from_directory
 
 # Import YOLO Engine
 try:
@@ -16,7 +16,7 @@ except ImportError:
     YOLO = None
 
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN: YOLOv8 AI (RETRY FIX) <<<")
+logging.info(">>> STARTING PLUGIN: YOLOv8 AI (FIXED IMPORT) <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -82,7 +82,7 @@ ai_ready = load_model()
 def action_start():
     state["monitoring_active"] = True
     state["failure_count"] = 0
-    state["action_triggered"] = False # Reset trigger so we can catch new failures
+    state["action_triggered"] = False
     logging.info("Monitoring STARTED")
     return jsonify({"success": True})
 
@@ -161,7 +161,6 @@ def background_monitor():
                     top_conf = float(result.boxes.conf[0])
                     state["failure_score"] = top_conf
                     
-                    # --- FIX: Cap the failure count ---
                     if state["failure_count"] < max_retries:
                         state["failure_count"] += 1
                     
