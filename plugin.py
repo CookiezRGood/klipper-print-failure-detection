@@ -14,7 +14,7 @@ except ImportError:
     def ssim(img1, img2): return 1.0
 
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN WITH STICKY REFERENCE LOGIC <<<")
+logging.info(">>> STARTING PLUGIN WITH STICKY REFERENCE + ASPECT RATIO <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -22,13 +22,14 @@ SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 
 default_config = {
     "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
-    "moonraker_url": "http://127.0.0.1:7125", 
+    "moonraker_url": "http://127.0.0.1:7125",
     "check_interval": 0.5,
-    "ssim_threshold": 0.85,     # Slightly lower to allow for head position variance
+    "ssim_threshold": 0.85,
     "mask_margin": 15,
     "max_mask_percent": 0.25,
     "consecutive_failures": 3,
-    "on_failure": "pause" 
+    "on_failure": "pause",
+    "aspect_ratio": "16:9"  # <--- NEW DEFAULT
 }
 
 config = default_config.copy()
@@ -49,7 +50,7 @@ state = {
     "debug_frame": None,
     "status": "idle",
     "previous_gray": None,
-    "last_stable_frame": None,  # The "Golden Standard" image
+    "last_stable_frame": None,
     "current_ssim": 1.0,
     "failure_count": 0,
     "action_triggered": False 
@@ -93,17 +94,14 @@ def background_monitor():
     
     while True:
         try:
-            # 1. CHECK IDLE STATE
             klipper_state = get_printer_state()
             
-            # Reset everything if we aren't printing
             if klipper_state not in ["printing", "paused"]:
                 state["status"] = "idle"
-                state["last_stable_frame"] = None # Reset reference for next print
+                state["last_stable_frame"] = None 
                 state["failure_count"] = 0
                 state["action_triggered"] = False
                 
-                # Still fetch image for UI
                 resp = requests.get(config['camera_url'], timeout=2)
                 if resp.status_code == 200:
                     arr = np.frombuffer(resp.content, np.uint8)
@@ -114,7 +112,6 @@ def background_monitor():
                 time.sleep(1) 
                 continue 
 
-            # 2. RUN DETECTION
             dilate_kernel = np.ones((int(config['mask_margin']), int(config['mask_margin'])), np.uint8)
             resp = requests.get(config['camera_url'], timeout=2)
             
@@ -129,7 +126,6 @@ def background_monitor():
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
-                # Initialize Reference on First Frame of Print
                 if state["previous_gray"] is None or state["last_stable_frame"] is None:
                     state["previous_gray"] = gray
                     state["last_stable_frame"] = gray
@@ -141,13 +137,9 @@ def background_monitor():
                 mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
                 mask_coverage = cv2.countNonZero(mask_dilated) / (height * width)
 
-                # --- MOTION DETECTED ---
                 if mask_coverage > 0.001:
                     state["status"] = "monitoring"
-                    state["current_ssim"] = 1.0 # Motion implies valid activity
-                    # CRITICAL FIX: DO NOT RESET FAILURE COUNT HERE
-                    # CRITICAL FIX: DO NOT UPDATE 'last_stable_frame' HERE
-                    # We simply wait for the motion to stop to verify the print.
+                    state["current_ssim"] = 1.0 
                     
                     contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     if contours:
@@ -158,29 +150,19 @@ def background_monitor():
                             x, y, w, h = cv2.boundingRect(c)
                             cv2.putText(debug_img, "Motion", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-                # --- STILL (CHECKING) ---
                 else:
                     if state["last_stable_frame"] is not None:
-                        # Compare Current View vs The Last Known GOOD View
                         score = ssim(gray, state["last_stable_frame"])
                         state["current_ssim"] = score
                         threshold = float(config["ssim_threshold"])
 
-                        # A. MATCH (Evolution)
                         if score >= threshold:
-                            # The print looks mostly the same (or grew slightly).
-                            # This is a valid state. Update the reference.
                             state["failure_count"] = 0
                             state["status"] = "checking"
-                            state["last_stable_frame"] = gray # <--- UPDATE REFERENCE HERE ONLY
-                            
+                            state["last_stable_frame"] = gray 
                             cv2.putText(debug_img, f"MATCH: {int(score*100)}%", (10, 30), 
                                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-                        # B. MISMATCH (Revolution/Failure)
                         else:
-                            # The print changed TOO much (e.g. part disappeared).
-                            # DO NOT UPDATE REFERENCE. Keep comparing to the old good image.
                             if state["failure_count"] < int(config["consecutive_failures"]):
                                 state["failure_count"] += 1
                             
@@ -190,7 +172,6 @@ def background_monitor():
                                 state["status"] = "failure_detected"
                                 trigger_printer_action()
                             
-                            # Visual Debug for Mismatch
                             cv2.putText(debug_img, f"MISMATCH: {int(score*100)}%", (10, 30), 
                                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
@@ -208,7 +189,6 @@ def background_monitor():
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
-# --- ROUTES (Unchanged) ---
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 
