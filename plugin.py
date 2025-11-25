@@ -16,7 +16,7 @@ except ImportError:
     YOLO = None
 
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN: YOLOv8 AI (FIXED IMPORT) <<<")
+logging.info(">>> STARTING PLUGIN: PERFORMANCE LOGGING <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -124,7 +124,7 @@ def background_monitor():
 
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
-            # Always fetch image
+            # Fetch Image
             resp = requests.get(config['camera_url'], timeout=2)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
@@ -149,9 +149,20 @@ def background_monitor():
             
             if model:
                 user_conf = float(config.get("ai_threshold", 0.5))
-                results = model(state["latest_frame"], conf=user_conf, verbose=False)
-                result = results[0]
                 
+                # --- PERFORMANCE TIMER START ---
+                start_time = time.time()
+                
+                results = model(state["latest_frame"], conf=user_conf, verbose=False)
+                
+                # --- PERFORMANCE TIMER END ---
+                duration = time.time() - start_time
+                
+                # Log time only if it's slow (>1s) to avoid spamming too much
+                if duration > 1.0:
+                    logging.info(f"PERFORMANCE: Inference took {duration:.2f} seconds")
+                
+                result = results[0]
                 state["annotated_frame"] = result.plot()
                 
                 box_count = len(result.boxes)
