@@ -14,7 +14,7 @@ except ImportError:
     def ssim(img1, img2): return 1.0
 
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN WITH ADJUSTABLE REFRESH RATE <<<")
+logging.info(">>> STARTING PLUGIN WITH MS INTERVALS <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -23,21 +23,25 @@ SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 default_config = {
     "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
     "moonraker_url": "http://127.0.0.1:7125",
-    "check_interval": 0.5,
+    "check_interval": 500,       # <--- NOW IN MILLISECONDS
     "ssim_threshold": 0.85,
     "mask_margin": 15,
     "max_mask_percent": 0.25,
     "consecutive_failures": 3,
     "on_failure": "pause",
     "aspect_ratio": "16:9",
-    "preview_refresh_rate": 500  # <--- NEW DEFAULT (ms)
+    "preview_refresh_rate": 500
 }
 
 config = default_config.copy()
 if os.path.exists(SETTINGS_FILE):
     try:
         with open(SETTINGS_FILE, 'r') as f:
-            config.update(json.load(f))
+            loaded = json.load(f)
+            # MIGRATION: If old check_interval was in seconds (e.g., 0.5), convert to ms
+            if "check_interval" in loaded and float(loaded["check_interval"]) < 10:
+                loaded["check_interval"] = int(float(loaded["check_interval"]) * 1000)
+            config.update(loaded)
     except Exception: pass
 
 def save_config_to_file():
@@ -185,7 +189,9 @@ def background_monitor():
             state["status"] = "connection_error"
             logging.error(f"Loop Error: {e}")
         
-        time.sleep(float(config["check_interval"]))
+        # --- FIX: Convert MS to Seconds for sleep() ---
+        sleep_ms = float(config.get("check_interval", 500))
+        time.sleep(sleep_ms / 1000.0)
 
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
