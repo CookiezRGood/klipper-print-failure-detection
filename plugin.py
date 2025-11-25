@@ -14,7 +14,7 @@ except ImportError:
     def ssim(img1, img2): return 1.0
 
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN: MACRO-ONLY MODE <<<")
+logging.info(">>> STARTING PLUGIN: MANUAL TEST SUPPORT <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -58,23 +58,22 @@ state = {
     "current_ssim": 1.0,
     "failure_count": 0,
     "action_triggered": False,
-    "monitoring_active": False  # <--- MUST BE TRUE TO CHECK
+    "monitoring_active": False 
 }
 
 # --- API TRIGGERS ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
-    # Reset reference frame so we start fresh right now
     state["last_stable_frame"] = None 
     state["failure_count"] = 0
-    logging.info("Signal Received: Monitoring STARTED")
+    logging.info("Signal Received: Monitoring STARTED (Manual)")
     return jsonify({"success": True})
 
 @app.route('/api/action/stop', methods=['POST', 'GET'])
 def action_stop():
     state["monitoring_active"] = False
-    logging.info("Signal Received: Monitoring STOPPED")
+    logging.info("Signal Received: Monitoring STOPPED (Manual)")
     return jsonify({"success": True})
 
 def get_printer_state():
@@ -117,15 +116,21 @@ def background_monitor():
         try:
             klipper_state = get_printer_state()
             
-            # 1. HANDLE NON-PRINTING STATES
-            if klipper_state not in ["printing", "paused"]:
+            # 0. RESET ON COMPLETION
+            # Automatically stop monitoring if print finishes/cancels
+            if klipper_state in ["complete", "error", "cancelled"]:
+                state["monitoring_active"] = False
+
+            # 1. IDLE CHECK
+            # We go to IDLE only if:
+            # A) Not printing AND 
+            # B) Not manually triggered by the user
+            if klipper_state not in ["printing", "paused"] and not state["monitoring_active"]:
                 state["status"] = "idle"
-                state["monitoring_active"] = False # Reset trigger automatically
                 state["last_stable_frame"] = None 
                 state["failure_count"] = 0
                 state["action_triggered"] = False
                 
-                # Fetch image for UI, but sleep
                 resp = requests.get(config['camera_url'], timeout=2)
                 if resp.status_code == 200:
                     arr = np.frombuffer(resp.content, np.uint8)
@@ -136,8 +141,7 @@ def background_monitor():
                 time.sleep(1) 
                 continue 
 
-            # 2. CHECK IF TRIGGERED
-            # We are printing, but have we received the start signal?
+            # 2. WAIT FOR TRIGGER (If printing but not active)
             if not state["monitoring_active"]:
                 state["status"] = "awaiting_macro"
                 
@@ -145,11 +149,9 @@ def background_monitor():
                 if resp.status_code == 200:
                     arr = np.frombuffer(resp.content, np.uint8)
                     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                    
                     debug_img = img.copy()
                     cv2.putText(debug_img, "WAITING FOR START SIGNAL...", (20, 50), 
                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 165, 0), 2)
-                    
                     state["latest_frame"] = img
                     state["debug_frame"] = debug_img
                 
@@ -171,7 +173,6 @@ def background_monitor():
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
-                # Initialize Reference
                 if state["previous_gray"] is None or state["last_stable_frame"] is None:
                     state["previous_gray"] = gray
                     state["last_stable_frame"] = gray
@@ -195,7 +196,6 @@ def background_monitor():
                             c = max(large_contours, key=cv2.contourArea)
                             x, y, w, h = cv2.boundingRect(c)
                             cv2.putText(debug_img, "Motion", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-
                 else:
                     if state["last_stable_frame"] is not None:
                         score = ssim(gray, state["last_stable_frame"])
@@ -234,6 +234,7 @@ def background_monitor():
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
+# --- ROUTES (Unchanged) ---
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 
