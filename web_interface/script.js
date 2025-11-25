@@ -8,7 +8,6 @@ const ssimText = document.getElementById('ssim-val');
 const retryText = document.getElementById('retry-val');
 const confidenceBar = document.getElementById('confidence-bar');
 
-// Image Refresh Loop
 function refreshImage() {
     const timestamp = new Date().getTime();
     const endpoint = debugToggle.checked ? '/api/debug_frame' : '/api/latest_frame';
@@ -16,7 +15,6 @@ function refreshImage() {
 }
 setInterval(refreshImage, REFRESH_RATE);
 
-// Status Loop
 async function updateStatus() {
     try {
         const res = await fetch('/api/status');
@@ -24,14 +22,10 @@ async function updateStatus() {
         
         statusBadge.innerText = data.status.toUpperCase();
         
-        if (data.status === 'failure_detected' || data.status === 'error') 
-            statusBadge.style.backgroundColor = '#F44336';
-        else if (data.status === 'monitoring') 
-            statusBadge.style.backgroundColor = '#4CAF50';
-        else if (data.status === 'connection_error')
-            statusBadge.style.backgroundColor = '#9E9E9E'; // Grey
-        else 
-            statusBadge.style.backgroundColor = '#f39c12';
+        if (data.status === 'failure_detected' || data.status === 'error') statusBadge.style.backgroundColor = '#F44336';
+        else if (data.status === 'monitoring') statusBadge.style.backgroundColor = '#4CAF50';
+        else if (data.status === 'connection_error') statusBadge.style.backgroundColor = '#9E9E9E';
+        else statusBadge.style.backgroundColor = '#f39c12';
 
         const ssimPercent = Math.round(data.ssim * 100);
         ssimText.innerText = `${ssimPercent}%`;
@@ -46,17 +40,17 @@ async function updateStatus() {
 }
 setInterval(updateStatus, 1000);
 
-// --- Settings Logic ---
 document.getElementById('open-settings-btn').addEventListener('click', async () => {
     const res = await fetch('/api/settings');
     const data = await res.json();
     
-    // Fill inputs
     document.getElementById('camera_url').value = data.camera_url;
+    document.getElementById('moonraker_url').value = data.moonraker_url || "http://127.0.0.1:7125";
     document.getElementById('check_interval').value = data.check_interval;
     document.getElementById('ssim_threshold').value = data.ssim_threshold;
     document.getElementById('mask_margin').value = data.mask_margin;
     document.getElementById('consecutive_failures').value = data.consecutive_failures;
+    document.getElementById('on_failure').value = data.on_failure || "nothing";
     
     settingsModal.showModal();
 });
@@ -66,10 +60,12 @@ document.getElementById('close-modal-x').addEventListener('click', () => setting
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
     const payload = {
         camera_url: document.getElementById('camera_url').value,
+        moonraker_url: document.getElementById('moonraker_url').value,
         check_interval: parseFloat(document.getElementById('check_interval').value),
         ssim_threshold: parseFloat(document.getElementById('ssim_threshold').value),
         mask_margin: parseInt(document.getElementById('mask_margin').value),
-        consecutive_failures: parseInt(document.getElementById('consecutive_failures').value)
+        consecutive_failures: parseInt(document.getElementById('consecutive_failures').value),
+        on_failure: document.getElementById('on_failure').value
     };
     
     await fetch('/api/settings', {
