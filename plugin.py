@@ -12,11 +12,17 @@ from flask import Flask, jsonify, request, send_from_directory, Response
 try:
     import tflite_runtime.interpreter as tflite
 except ImportError:
-    logging.warning("TFLite not found. AI detection will not work.")
+    logging.warning("CRITICAL: TFLite not found. Run install.sh again.")
     tflite = None
 
-logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN: AI SPAGHETTI DETECTION <<<")
+# --- LOGGING SETUP ---
+# 1. Mute the web server spam
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
+
+# 2. Setup main logger
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.info(">>> STARTING PLUGIN: DEBUG MODE <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -26,8 +32,8 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.tflite')
 default_config = {
     "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
     "moonraker_url": "http://127.0.0.1:7125",
-    "check_interval": 2000,     # Slower interval for AI (2s is plenty)
-    "ai_threshold": 0.60,       # 60% confidence to trigger failure
+    "check_interval": 2000,
+    "ai_threshold": 0.60,
     "consecutive_failures": 2,
     "on_failure": "pause",
     "aspect_ratio": "16:9",
@@ -50,7 +56,7 @@ def save_config_to_file():
 state = {
     "latest_frame": None,
     "status": "idle",
-    "failure_score": 0.0, # 0.0 = Good, 1.0 = Spaghetti
+    "failure_score": 0.0,
     "failure_count": 0,
     "action_triggered": False,
     "monitoring_active": False 
@@ -63,9 +69,13 @@ output_details = None
 
 def load_model():
     global interpreter, input_details, output_details
+    
     if not os.path.exists(MODEL_PATH):
-        logging.error("model.tflite not found!")
+        logging.error(f"CRITICAL: model.tflite NOT FOUND at {MODEL_PATH}")
         return False
+    
+    file_size = os.path.getsize(MODEL_PATH)
+    logging.info(f"Found model.tflite (Size: {file_size} bytes)")
     
     try:
         interpreter = tflite.Interpreter(model_path=MODEL_PATH)
@@ -73,61 +83,61 @@ def load_model():
         input_details = interpreter.get_input_details()
         output_details = interpreter.get_output_details()
         logging.info("AI Model Loaded Successfully.")
+        logging.info(f"Model Input Shape: {input_details[0]['shape']}")
         return True
     except Exception as e:
-        logging.error(f"Failed to load AI model: {e}")
+        logging.error(f"CRITICAL: Failed to load AI model: {e}")
         return False
 
-# Initialize AI
 ai_ready = load_model()
 
 def run_inference(image):
     if not ai_ready or interpreter is None: return 0.0
     
     try:
-        # 1. Resize to model input shape (usually 300x300 or 224x224)
         input_shape = input_details[0]['shape']
         height, width = input_shape[1], input_shape[2]
         
         resized = cv2.resize(image, (width, height))
+        # Convert BGR to RGB (Critical for accuracy)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         
-        # 2. Preprocess (Model specific, usually 0-255 uint8 or 0-1 float)
-        # Most mobile detection models expect uint8. If float, we normalize.
-        if input_details[0]['dtype'] == np.float32:
-            input_data = np.float32(resized) / 255.0
-        else:
-            input_data = np.expand_dims(resized, axis=0)
+        input_data = np.expand_dims(rgb, axis=0)
 
-        # 3. Run
+        if input_details[0]['dtype'] == np.float32:
+            input_data = np.float32(input_data) / 255.0
+
         interpreter.set_tensor(input_details[0]['index'], input_data)
         interpreter.invoke()
 
-        # 4. Parse Output
-        # Output format varies by model. Usually [Failure_Score, Safe_Score] or similar.
         output_data = interpreter.get_tensor(output_details[0]['index'])
         
-        # Assuming index 1 is "Failure" (need to verify based on model, usually index 1 is 'spaghetti')
-        # If using the common 'spaghetti-detect' model: [Safe, Fail]
-        fail_score = float(output_data[0][1]) / 255.0 # Convert byte to float
+        # Index 1 is typically the "Failure" class in standard spaghetti models
+        raw_score = output_data[0][1]
         
+        if output_details[0]['dtype'] == np.uint8:
+            fail_score = float(raw_score) / 255.0
+        else:
+            fail_score = float(raw_score)
+            
         return fail_score
         
     except Exception as e:
         logging.error(f"Inference Error: {e}")
         return 0.0
 
-# --- ROUTES & TRIGGERS ---
+# --- ROUTES ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
     state["failure_count"] = 0
-    logging.info("Monitoring STARTED")
+    logging.info("Manual Start Triggered")
     return jsonify({"success": True})
 
 @app.route('/api/action/stop', methods=['POST', 'GET'])
 def action_stop():
     state["monitoring_active"] = False
-    logging.info("Monitoring STOPPED")
+    logging.info("Manual Stop Triggered")
     return jsonify({"success": True})
 
 def get_printer_state():
@@ -154,22 +164,24 @@ def trigger_printer_action():
     except Exception: pass
 
 def background_monitor():
+    logging.info("Background monitor loop started.")
+    
     while True:
         try:
             klipper_state = get_printer_state()
             if klipper_state in ["complete", "error", "cancelled"]:
                 state["monitoring_active"] = False
 
-            # Run if Printing OR Manual
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
-            # 1. FETCH IMAGE
+            # Always fetch image for UI
             resp = requests.get(config['camera_url'], timeout=2)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
                 img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                 state["latest_frame"] = img
             else:
+                logging.error("Camera connection failed.")
                 state["status"] = "connection_error"
                 time.sleep(2)
                 continue
@@ -181,17 +193,20 @@ def background_monitor():
                 time.sleep(1)
                 continue
 
-            # 2. AI CHECK
             state["status"] = "monitoring"
             
+            # Run AI
             score = run_inference(state["latest_frame"])
             state["failure_score"] = score
             
+            # --- DEBUG LOGGING (Visible in journalctl) ---
+            logging.info(f"DEBUG: AI Score: {score:.4f} | Threshold: {config.get('ai_threshold')}")
+
             threshold = float(config.get("ai_threshold", 0.6))
 
             if score > threshold:
                 state["failure_count"] += 1
-                logging.info(f"AI Alert: {score:.2f} | Count: {state['failure_count']}")
+                logging.info(f"ALERT: Failure detected ({state['failure_count']}/{int(config['consecutive_failures'])})")
                 
                 if state["failure_count"] >= int(config["consecutive_failures"]):
                     state["status"] = "failure_detected"
@@ -207,7 +222,7 @@ def background_monitor():
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
-# --- ROUTES ---
+# Routes
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 @app.route('/<path:path>')
@@ -230,15 +245,13 @@ def get_status():
 @app.route('/api/latest_frame')
 def latest_frame():
     img = state["latest_frame"] if state["latest_frame"] is not None else np.zeros((360, 640, 3), np.uint8)
-    # Draw Debug Score
+    # Draw Debug Score directly on image
     debug_img = img.copy()
     color = (0, 255, 0) if state["failure_score"] < float(config["ai_threshold"]) else (0, 0, 255)
-    cv2.putText(debug_img, f"AI SCORE: {int(state['failure_score']*100)}%", (20, 50), 
+    cv2.putText(debug_img, f"AI: {int(state['failure_score']*100)}%", (20, 50), 
                 cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
-    
     _, buffer = cv2.imencode('.jpg', debug_img)
     return Response(buffer.tobytes(), mimetype='image/jpeg')
-# Remap debug_frame to latest_frame since we don't need separate debug logic anymore
 @app.route('/api/debug_frame')
 def debug_frame(): return latest_frame()
 
