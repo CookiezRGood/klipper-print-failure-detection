@@ -8,22 +8,26 @@ import json
 import os
 from flask import Flask, jsonify, request, send_from_directory, Response
 
+# Import SSIM logic
 try:
     from core.detection import ssim
 except ImportError:
+    # Fallback if core folder is missing
     def ssim(img1, img2): return 1.0
 
+# Set up logging
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN: STATUS UPDATE FIX <<<")
+logging.info(">>> STARTING PLUGIN: DOUBLE BLIND + MANUAL OVERRIDE <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
+# --- CONFIGURATION ---
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 
 default_config = {
     "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
     "moonraker_url": "http://127.0.0.1:7125",
-    "check_interval": 200,
+    "check_interval": 500,
     "ssim_threshold": 0.85,
     "mask_margin": 20,
     "max_mask_percent": 0.25,
@@ -33,11 +37,13 @@ default_config = {
     "preview_refresh_rate": 500
 }
 
+# Load Settings
 config = default_config.copy()
 if os.path.exists(SETTINGS_FILE):
     try:
         with open(SETTINGS_FILE, 'r') as f:
             loaded = json.load(f)
+            # Migration: Check if interval is in seconds (<10) and convert to ms
             if "check_interval" in loaded and float(loaded["check_interval"]) < 10:
                 loaded["check_interval"] = int(float(loaded["check_interval"]) * 1000)
             config.update(loaded)
@@ -49,23 +55,29 @@ def save_config_to_file():
             json.dump(config, f, indent=4)
     except Exception: pass
 
+# --- GLOBAL STATE ---
 state = {
     "latest_frame": None,
     "debug_frame": None,
     "status": "idle",
     "previous_gray": None,
-    "last_stable_frame": None,
-    "ref_mask": None,
-    "active_mask": None,
+    
+    # Double Blind State Variables
+    "last_stable_frame": None,  # The Reference Image
+    "ref_mask": None,           # The Mask for the Reference Image
+    "active_mask": None,        # The Mask for the Current Image
+    
     "current_ssim": 1.0,
     "failure_count": 0,
     "action_triggered": False,
-    "monitoring_active": False 
+    "monitoring_active": False  # Controls Macro/Manual Start
 }
 
+# --- API ROUTES FOR TRIGGERS ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
+    # Reset reference so we start fresh
     state["last_stable_frame"] = None 
     state["ref_mask"] = None
     state["active_mask"] = None
@@ -79,6 +91,7 @@ def action_stop():
     logging.info("Signal Received: Monitoring STOPPED")
     return jsonify({"success": True})
 
+# --- HELPER FUNCTIONS ---
 def get_printer_state():
     url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
     try:
@@ -99,6 +112,7 @@ def trigger_printer_action():
     logging.info(f"FAILURE CONFIRMED. Executing action: {action}")
 
     try:
+        # Always log to console
         console_msg = f"M118 >>> FAILURE DETECTED! Action: {action.upper()} <<<"
         requests.post(f"{url}/printer/gcode/script", json={"script": console_msg})
 
@@ -112,6 +126,7 @@ def trigger_printer_action():
     except Exception as e:
         logging.info(f"Failed to send command to Moonraker: {e}")
 
+# --- MAIN LOOP ---
 def background_monitor():
     logging.info("Background monitor started.")
     
@@ -119,14 +134,17 @@ def background_monitor():
         try:
             klipper_state = get_printer_state()
             
-            # 1. AUTO RESET
+            # 1. AUTO-RESET ON COMPLETION
+            # If the print finishes or cancels, we turn off monitoring automatically.
             if klipper_state in ["complete", "error", "cancelled"]:
                 state["monitoring_active"] = False
 
-            # 2. IDLE CHECK
+            # 2. DETERMINE IF WE SHOULD RUN
+            # We run if the printer is printing/paused OR if the user Manually Started it.
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
             if not should_run:
+                # --- IDLE STATE ---
                 state["status"] = "idle"
                 state["last_stable_frame"] = None 
                 state["ref_mask"] = None
@@ -134,6 +152,7 @@ def background_monitor():
                 state["failure_count"] = 0
                 state["action_triggered"] = False
                 
+                # Fetch image for UI only
                 resp = requests.get(config['camera_url'], timeout=2)
                 if resp.status_code == 200:
                     arr = np.frombuffer(resp.content, np.uint8)
@@ -144,18 +163,22 @@ def background_monitor():
                 time.sleep(1) 
                 continue 
 
-            # 3. AWAITING TRIGGER
+            # 3. AWAITING TRIGGER (Printing but not Active)
             if not state["monitoring_active"]:
                 state["status"] = "awaiting_macro"
+                
                 resp = requests.get(config['camera_url'], timeout=2)
                 if resp.status_code == 200:
                     arr = np.frombuffer(resp.content, np.uint8)
                     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    
                     debug_img = img.copy()
                     cv2.putText(debug_img, "WAITING FOR START SIGNAL...", (20, 50), 
                               cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 165, 0), 2)
+                    
                     state["latest_frame"] = img
                     state["debug_frame"] = debug_img
+                
                 time.sleep(1)
                 continue
 
@@ -174,19 +197,22 @@ def background_monitor():
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
+                # Initialize Previous Frame logic
                 if state["previous_gray"] is None:
                     state["previous_gray"] = gray
                     time.sleep(0.1)
                     continue
 
+                # Motion Calculation
                 frame_delta = cv2.absdiff(state["previous_gray"], gray)
                 thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
                 mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
                 mask_coverage = cv2.countNonZero(mask_dilated) / (height * width)
 
+                # Initialize Reference if missing
                 if state["last_stable_frame"] is None:
                     state["last_stable_frame"] = gray
-                    state["ref_mask"] = np.zeros_like(gray)
+                    state["ref_mask"] = np.zeros_like(gray) # Start with empty mask
                     state["previous_gray"] = gray
                     continue
 
@@ -195,42 +221,50 @@ def background_monitor():
                     state["status"] = "monitoring"
                     state["current_ssim"] = 1.0 
                     
+                    # Save the active mask (Where the head IS)
                     state["active_mask"] = mask_dilated.copy()
 
+                    # Draw Motion
                     contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     cv2.drawContours(debug_img, contours, -1, (0, 255, 0), 2)
                     cv2.putText(debug_img, "Motion Tracking...", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
                 # --- IS STILL? ---
                 else:
-                    # FORCE STATUS UPDATE: We are checking now.
-                    state["status"] = "checking" 
+                    state["status"] = "checking"
 
                     if state["active_mask"] is None:
                         state["active_mask"] = np.zeros_like(gray)
                     
+                    # DOUBLE BLIND MASKING
+                    # Combine Current Mask + Old Reference Mask
                     combined_mask = cv2.bitwise_or(state["active_mask"], state["ref_mask"])
                     
+                    # Black out head in BOTH images
                     gray_masked = gray.copy()
                     ref_masked = state["last_stable_frame"].copy()
                     gray_masked[combined_mask > 0] = 0
                     ref_masked[combined_mask > 0] = 0
 
+                    # Compare what's left (The Bed)
                     score = ssim(gray_masked, ref_masked)
                     state["current_ssim"] = score
                     threshold = float(config["ssim_threshold"])
 
                     if score >= threshold:
-                        # Valid Match
+                        # MATCH (Valid Evolution)
                         state["failure_count"] = 0
+                        
+                        # Update Reference to this new state
                         state["last_stable_frame"] = gray 
                         state["ref_mask"] = state["active_mask"].copy() 
                         
+                        # Debug overlay
                         debug_img[combined_mask > 0] = 0 
                         cv2.putText(debug_img, f"MATCH: {int(score*100)}%", (10, 30), 
                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     else:
-                        # Failure Logic
+                        # MISMATCH (Potential Failure)
                         if state["failure_count"] < int(config["consecutive_failures"]):
                             state["failure_count"] += 1
                         
