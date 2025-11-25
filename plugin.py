@@ -55,7 +55,20 @@ state = {
     "action_triggered": False 
 }
 
-# --- MOONRAKER INTEGRATION ---
+# --- HELPER: GET KLIPPER STATUS ---
+def get_printer_state():
+    url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
+    try:
+        # We ask Moonraker for the print_stats
+        r = requests.get(f"{url}/printer/objects/query?print_stats", timeout=0.5)
+        if r.status_code == 200:
+            data = r.json()
+            # Returns: 'standby', 'printing', 'paused', 'complete', 'error'
+            return data.get("result", {}).get("status", {}).get("print_stats", {}).get("state", "standby")
+    except Exception:
+        pass
+    return "standby"
+
 def trigger_printer_action():
     if state["action_triggered"]: return 
 
@@ -65,18 +78,14 @@ def trigger_printer_action():
     log_info(f"FAILURE CONFIRMED. Executing action: {action}")
 
     try:
-        # 1. ALWAYS send a message to the Mainsail Console
-        # We use M118 (Respond) to print to the terminal
         console_msg = f"M118 >>> FAILURE DETECTED! Action: {action.upper()} <<<"
         requests.post(f"{url}/printer/gcode/script", json={"script": console_msg})
 
-        # 2. Execute the specific action
         if action == "pause":
             requests.post(f"{url}/printer/print/pause")
         elif action == "cancel":
             requests.post(f"{url}/printer/print/cancel")
         
-        # Mark as triggered
         state["action_triggered"] = True
         
     except Exception as e:
@@ -87,6 +96,23 @@ def background_monitor():
     
     while True:
         try:
+            # 1. Check Klipper State First
+            klipper_state = get_printer_state()
+            
+            # If NOT printing (and not paused), just show IDLE
+            if klipper_state not in ["printing", "paused"]:
+                state["status"] = "idle"
+                # Still fetch the image so the UI works, but skip detection logic
+                resp = requests.get(config['camera_url'], timeout=2)
+                if resp.status_code == 200:
+                    arr = np.frombuffer(resp.content, np.uint8)
+                    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    state["latest_frame"] = img
+                    state["debug_frame"] = img
+                time.sleep(1) # Sleep longer when idle
+                continue
+
+            # 2. If Printing, Run Logic
             dilate_kernel = np.ones((int(config['mask_margin']), int(config['mask_margin'])), np.uint8)
             resp = requests.get(config['camera_url'], timeout=2)
             
@@ -117,7 +143,7 @@ def background_monitor():
                     state["status"] = "monitoring"
                     state["current_ssim"] = 1.0
                     state["failure_count"] = 0
-                    state["action_triggered"] = False # Reset Trigger
+                    state["action_triggered"] = False
                     state["last_stable_frame"] = gray 
                     
                     contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
