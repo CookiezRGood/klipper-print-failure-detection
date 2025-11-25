@@ -14,7 +14,7 @@ except ImportError:
     def ssim(img1, img2): return 1.0
 
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN WITH MS INTERVALS <<<")
+logging.info(">>> STARTING PLUGIN: MACRO-ONLY MODE <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -23,7 +23,7 @@ SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 default_config = {
     "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
     "moonraker_url": "http://127.0.0.1:7125",
-    "check_interval": 500,       # <--- NOW IN MILLISECONDS
+    "check_interval": 500,
     "ssim_threshold": 0.85,
     "mask_margin": 15,
     "max_mask_percent": 0.25,
@@ -38,7 +38,6 @@ if os.path.exists(SETTINGS_FILE):
     try:
         with open(SETTINGS_FILE, 'r') as f:
             loaded = json.load(f)
-            # MIGRATION: If old check_interval was in seconds (e.g., 0.5), convert to ms
             if "check_interval" in loaded and float(loaded["check_interval"]) < 10:
                 loaded["check_interval"] = int(float(loaded["check_interval"]) * 1000)
             config.update(loaded)
@@ -58,8 +57,25 @@ state = {
     "last_stable_frame": None, 
     "current_ssim": 1.0,
     "failure_count": 0,
-    "action_triggered": False 
+    "action_triggered": False,
+    "monitoring_active": False  # <--- MUST BE TRUE TO CHECK
 }
+
+# --- API TRIGGERS ---
+@app.route('/api/action/start', methods=['POST', 'GET'])
+def action_start():
+    state["monitoring_active"] = True
+    # Reset reference frame so we start fresh right now
+    state["last_stable_frame"] = None 
+    state["failure_count"] = 0
+    logging.info("Signal Received: Monitoring STARTED")
+    return jsonify({"success": True})
+
+@app.route('/api/action/stop', methods=['POST', 'GET'])
+def action_stop():
+    state["monitoring_active"] = False
+    logging.info("Signal Received: Monitoring STOPPED")
+    return jsonify({"success": True})
 
 def get_printer_state():
     url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
@@ -101,12 +117,15 @@ def background_monitor():
         try:
             klipper_state = get_printer_state()
             
+            # 1. HANDLE NON-PRINTING STATES
             if klipper_state not in ["printing", "paused"]:
                 state["status"] = "idle"
+                state["monitoring_active"] = False # Reset trigger automatically
                 state["last_stable_frame"] = None 
                 state["failure_count"] = 0
                 state["action_triggered"] = False
                 
+                # Fetch image for UI, but sleep
                 resp = requests.get(config['camera_url'], timeout=2)
                 if resp.status_code == 200:
                     arr = np.frombuffer(resp.content, np.uint8)
@@ -117,6 +136,27 @@ def background_monitor():
                 time.sleep(1) 
                 continue 
 
+            # 2. CHECK IF TRIGGERED
+            # We are printing, but have we received the start signal?
+            if not state["monitoring_active"]:
+                state["status"] = "awaiting_macro"
+                
+                resp = requests.get(config['camera_url'], timeout=2)
+                if resp.status_code == 200:
+                    arr = np.frombuffer(resp.content, np.uint8)
+                    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    
+                    debug_img = img.copy()
+                    cv2.putText(debug_img, "WAITING FOR START SIGNAL...", (20, 50), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 165, 0), 2)
+                    
+                    state["latest_frame"] = img
+                    state["debug_frame"] = debug_img
+                
+                time.sleep(1)
+                continue
+
+            # 3. RUN DETECTION (Active)
             dilate_kernel = np.ones((int(config['mask_margin']), int(config['mask_margin'])), np.uint8)
             resp = requests.get(config['camera_url'], timeout=2)
             
@@ -131,6 +171,7 @@ def background_monitor():
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
+                # Initialize Reference
                 if state["previous_gray"] is None or state["last_stable_frame"] is None:
                     state["previous_gray"] = gray
                     state["last_stable_frame"] = gray
@@ -171,8 +212,6 @@ def background_monitor():
                             if state["failure_count"] < int(config["consecutive_failures"]):
                                 state["failure_count"] += 1
                             
-                            logging.info(f"Mismatch detected! Score: {score:.2f}. Retries: {state['failure_count']}")
-                            
                             if state["failure_count"] >= int(config["consecutive_failures"]):
                                 state["status"] = "failure_detected"
                                 trigger_printer_action()
@@ -189,7 +228,6 @@ def background_monitor():
             state["status"] = "connection_error"
             logging.error(f"Loop Error: {e}")
         
-        # --- FIX: Convert MS to Seconds for sleep() ---
         sleep_ms = float(config.get("check_interval", 500))
         time.sleep(sleep_ms / 1000.0)
 
