@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# --- 1. SETUP ---
 if [ -z "$SUDO_USER" ]; then
     echo "Error: This script must be run using sudo."
     exit 1
@@ -12,44 +11,37 @@ SERVICE_NAME="klipper-print-failure-detection"
 echo "Detected User: $KLIPPER_USER"
 echo "Installation Directory: $PLUGIN_DIR"
 
-# --- 2. Install System Dependencies ---
+# 1. System Dependencies
+# libgl1 is required for the image processing backend of YOLO
 echo "Installing system libraries..."
-# libatlas-base-dev is required for NumPy/TensorFlow on Pi
-apt-get update && apt-get install -y python3-opencv python3-venv libopenjp2-7 libatlas-base-dev
+apt-get update && apt-get install -y python3-opencv python3-venv libopenjp2-7 libgl1
 
-# --- 3. Create Virtual Environment ---
+# 2. Virtual Environment
 if [ ! -d "$PLUGIN_DIR/venv" ]; then
     echo "Creating Python virtual environment..."
     sudo -u "$KLIPPER_USER" python3 -m venv "$PLUGIN_DIR/venv"
 fi
 
-# --- 4. Install Python Requirements ---
-echo "Installing Python requirements (This may take a while)..."
-sudo -u "$KLIPPER_USER" "$PLUGIN_DIR/venv/bin/pip" install -r "$PLUGIN_DIR/requirements.txt"
+# 3. Install YOLOv8 (Ultralytics)
+echo "------------------------------------------------"
+echo "INSTALLING AI ENGINE (YOLOv8)"
+echo "This will download PyTorch (~200MB). It may take 5-10 mins."
+echo "------------------------------------------------"
 
-# --- 5. Download Pre-Trained AI Model ---
-MODEL_URL="https://github.com/frenck/python-spaghetti-detect/raw/main/spaghetti_detect/model.tflite"
-LABELS_URL="https://github.com/frenck/python-spaghetti-detect/raw/main/spaghetti_detect/labels.txt"
+# We use --no-cache-dir to save SD card write cycles
+sudo -u "$KLIPPER_USER" "$PLUGIN_DIR/venv/bin/pip" install --no-cache-dir -r "$PLUGIN_DIR/requirements.txt"
 
-echo "Downloading AI Model..."
-if [ ! -f "$PLUGIN_DIR/model.tflite" ]; then
-    sudo -u "$KLIPPER_USER" curl -L -o "$PLUGIN_DIR/model.tflite" "$MODEL_URL"
-fi
-if [ ! -f "$PLUGIN_DIR/labels.txt" ]; then
-    sudo -u "$KLIPPER_USER" curl -L -o "$PLUGIN_DIR/labels.txt" "$LABELS_URL"
-fi
-
-# --- 6. Permissions Guarantee ---
-echo "Guarding against file permission errors..."
+# 4. Permissions Fix
+echo "Fixing permissions..."
 chown -R "$KLIPPER_USER":"$KLIPPER_USER" "$PLUGIN_DIR"
 
-# --- 7. Service File Creation ---
+# 5. Service Creation
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-echo "Creating Systemd service file..."
+echo "Creating Systemd service..."
 
 cat > $SERVICE_FILE <<EOF
 [Unit]
-Description=Klipper Print Failure Detection (AI Powered)
+Description=Klipper Print Failure Detection (YOLOv8)
 After=network.target
 
 [Service]
@@ -64,13 +56,14 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-# --- 8. Enable and Start Service ---
-echo "Enabling and starting service..."
+# 6. Enable Service
+echo "Enabling service..."
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME".service
 systemctl restart "$SERVICE_NAME".service
 
 echo "------------------------------------------------"
-echo "AI Installation complete!"
-echo "Access the dashboard at: http://<your-ip>:7126"
+echo "Installation Complete!"
+echo "IMPORTANT: You must place 'model.pt' in:"
+echo "$PLUGIN_DIR/"
 echo "------------------------------------------------"
