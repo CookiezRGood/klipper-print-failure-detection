@@ -14,7 +14,7 @@ except ImportError:
     def ssim(img1, img2): return 1.0
 
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN WITH STICKY REFERENCE + ASPECT RATIO <<<")
+logging.info(">>> STARTING PLUGIN WITH ADJUSTABLE REFRESH RATE <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -29,7 +29,8 @@ default_config = {
     "max_mask_percent": 0.25,
     "consecutive_failures": 3,
     "on_failure": "pause",
-    "aspect_ratio": "16:9"  # <--- NEW DEFAULT
+    "aspect_ratio": "16:9",
+    "preview_refresh_rate": 500  # <--- NEW DEFAULT (ms)
 }
 
 config = default_config.copy()
@@ -50,7 +51,7 @@ state = {
     "debug_frame": None,
     "status": "idle",
     "previous_gray": None,
-    "last_stable_frame": None,
+    "last_stable_frame": None, 
     "current_ssim": 1.0,
     "failure_count": 0,
     "action_triggered": False 
