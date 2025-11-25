@@ -6,35 +6,29 @@ import numpy as np
 import requests
 import json
 import os
-from flask import Flask, jsonify, request, send_from_directory, Response
+from flask import Flask, jsonify, request, Response
 
-# Load TFLite
+# Import YOLO Engine
 try:
-    import tflite_runtime.interpreter as tflite
+    from ultralytics import YOLO
 except ImportError:
-    logging.warning("CRITICAL: TFLite not found. Run install.sh again.")
-    tflite = None
+    logging.warning("CRITICAL: Ultralytics not found. AI will not work.")
+    YOLO = None
 
-# --- LOGGING SETUP ---
-# 1. Mute the web server spam
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
-
-# 2. Setup main logger
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: DEBUG MODE <<<")
+logging.basicConfig(level=logging.INFO)
+logging.info(">>> STARTING PLUGIN: YOLOv8 AI <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.tflite')
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.pt')
 
 default_config = {
     "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
     "moonraker_url": "http://127.0.0.1:7125",
-    "check_interval": 2000,
-    "ai_threshold": 0.60,
-    "consecutive_failures": 2,
+    "check_interval": 2000,     # AI takes ~500ms to run, so check every 2-5s
+    "ai_threshold": 0.50,       # Confidence threshold (0.0 - 1.0)
+    "consecutive_failures": 1,  # YOLO is accurate; 1 detection is usually enough
     "on_failure": "pause",
     "aspect_ratio": "16:9",
     "preview_refresh_rate": 500
@@ -55,6 +49,7 @@ def save_config_to_file():
 
 state = {
     "latest_frame": None,
+    "annotated_frame": None, # The image with AI boxes drawn
     "status": "idle",
     "failure_score": 0.0,
     "failure_count": 0,
@@ -63,81 +58,38 @@ state = {
 }
 
 # --- AI ENGINE ---
-interpreter = None
-input_details = None
-output_details = None
+model = None
 
 def load_model():
-    global interpreter, input_details, output_details
-    
+    global model
     if not os.path.exists(MODEL_PATH):
-        logging.error(f"CRITICAL: model.tflite NOT FOUND at {MODEL_PATH}")
+        logging.error(f"CRITICAL: model.pt NOT FOUND at {MODEL_PATH}")
         return False
     
-    file_size = os.path.getsize(MODEL_PATH)
-    logging.info(f"Found model.tflite (Size: {file_size} bytes)")
-    
     try:
-        interpreter = tflite.Interpreter(model_path=MODEL_PATH)
-        interpreter.allocate_tensors()
-        input_details = interpreter.get_input_details()
-        output_details = interpreter.get_output_details()
-        logging.info("AI Model Loaded Successfully.")
-        logging.info(f"Model Input Shape: {input_details[0]['shape']}")
+        # Load model (optimized for CPU)
+        logging.info("Loading YOLOv8 Model... (This may take 30s)")
+        model = YOLO(MODEL_PATH, task='detect')
+        logging.info("YOLOv8 Model Loaded Successfully.")
         return True
     except Exception as e:
-        logging.error(f"CRITICAL: Failed to load AI model: {e}")
+        logging.error(f"Failed to load YOLO: {e}")
         return False
 
 ai_ready = load_model()
-
-def run_inference(image):
-    if not ai_ready or interpreter is None: return 0.0
-    
-    try:
-        input_shape = input_details[0]['shape']
-        height, width = input_shape[1], input_shape[2]
-        
-        resized = cv2.resize(image, (width, height))
-        # Convert BGR to RGB (Critical for accuracy)
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        
-        input_data = np.expand_dims(rgb, axis=0)
-
-        if input_details[0]['dtype'] == np.float32:
-            input_data = np.float32(input_data) / 255.0
-
-        interpreter.set_tensor(input_details[0]['index'], input_data)
-        interpreter.invoke()
-
-        output_data = interpreter.get_tensor(output_details[0]['index'])
-        
-        # Index 1 is typically the "Failure" class in standard spaghetti models
-        raw_score = output_data[0][1]
-        
-        if output_details[0]['dtype'] == np.uint8:
-            fail_score = float(raw_score) / 255.0
-        else:
-            fail_score = float(raw_score)
-            
-        return fail_score
-        
-    except Exception as e:
-        logging.error(f"Inference Error: {e}")
-        return 0.0
 
 # --- ROUTES ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
     state["failure_count"] = 0
-    logging.info("Manual Start Triggered")
+    logging.info("Monitoring STARTED")
     return jsonify({"success": True})
 
 @app.route('/api/action/stop', methods=['POST', 'GET'])
 def action_stop():
     state["monitoring_active"] = False
-    logging.info("Manual Stop Triggered")
+    logging.info("Monitoring STOPPED")
     return jsonify({"success": True})
 
 def get_printer_state():
@@ -156,7 +108,7 @@ def trigger_printer_action():
     url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
     logging.info(f"FAILURE CONFIRMED. Action: {action}")
     try:
-        console_msg = f"M118 >>> AI DETECTED FAILURE! Action: {action.upper()} <<<"
+        console_msg = f"M118 >>> YOLO DETECTED FAILURE! Action: {action.upper()} <<<"
         requests.post(f"{url}/printer/gcode/script", json={"script": console_msg})
         if action == "pause": requests.post(f"{url}/printer/print/pause")
         elif action == "cancel": requests.post(f"{url}/printer/print/cancel")
@@ -164,8 +116,6 @@ def trigger_printer_action():
     except Exception: pass
 
 def background_monitor():
-    logging.info("Background monitor loop started.")
-    
     while True:
         try:
             klipper_state = get_printer_state()
@@ -174,14 +124,16 @@ def background_monitor():
 
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
-            # Always fetch image for UI
+            # Always fetch image
             resp = requests.get(config['camera_url'], timeout=2)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
                 img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                 state["latest_frame"] = img
+                # If not running AI, just show the raw frame
+                if not should_run:
+                    state["annotated_frame"] = img
             else:
-                logging.error("Camera connection failed.")
                 state["status"] = "connection_error"
                 time.sleep(2)
                 continue
@@ -193,26 +145,40 @@ def background_monitor():
                 time.sleep(1)
                 continue
 
+            # --- AI INFERENCE ---
             state["status"] = "monitoring"
             
-            # Run AI
-            score = run_inference(state["latest_frame"])
-            state["failure_score"] = score
-            
-            # --- DEBUG LOGGING (Visible in journalctl) ---
-            logging.info(f"DEBUG: AI Score: {score:.4f} | Threshold: {config.get('ai_threshold')}")
-
-            threshold = float(config.get("ai_threshold", 0.6))
-
-            if score > threshold:
-                state["failure_count"] += 1
-                logging.info(f"ALERT: Failure detected ({state['failure_count']}/{int(config['consecutive_failures'])})")
+            if model:
+                # Run YOLO on the image
+                # conf=THRESHOLD: Only show boxes if confidence > user setting
+                user_conf = float(config.get("ai_threshold", 0.5))
                 
-                if state["failure_count"] >= int(config["consecutive_failures"]):
-                    state["status"] = "failure_detected"
-                    trigger_printer_action()
-            else:
-                state["failure_count"] = 0
+                # verbose=False keeps the logs clean
+                results = model(state["latest_frame"], conf=user_conf, verbose=False)
+                result = results[0]
+                
+                # 1. Draw the boxes on a new image
+                # plot() returns the image with boxes drawn
+                state["annotated_frame"] = result.plot()
+                
+                # 2. Count Detections
+                box_count = len(result.boxes)
+                
+                if box_count > 0:
+                    # We found something!
+                    top_conf = float(result.boxes.conf[0])
+                    state["failure_score"] = top_conf
+                    
+                    state["failure_count"] += 1
+                    logging.info(f"YOLO Alert: {box_count} objects detected. Confidence: {top_conf:.2f}")
+                    
+                    if state["failure_count"] >= int(config["consecutive_failures"]):
+                        state["status"] = "failure_detected"
+                        trigger_printer_action()
+                else:
+                    # Clean bed
+                    state["failure_score"] = 0.0
+                    state["failure_count"] = 0
 
         except Exception as e:
             logging.error(f"Loop Error: {e}")
@@ -244,13 +210,9 @@ def get_status():
     })
 @app.route('/api/latest_frame')
 def latest_frame():
-    img = state["latest_frame"] if state["latest_frame"] is not None else np.zeros((360, 640, 3), np.uint8)
-    # Draw Debug Score directly on image
-    debug_img = img.copy()
-    color = (0, 255, 0) if state["failure_score"] < float(config["ai_threshold"]) else (0, 0, 255)
-    cv2.putText(debug_img, f"AI: {int(state['failure_score']*100)}%", (20, 50), 
-                cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
-    _, buffer = cv2.imencode('.jpg', debug_img)
+    # Serve the ANNOTATED frame (with boxes)
+    img = state["annotated_frame"] if state["annotated_frame"] is not None else np.zeros((360, 640, 3), np.uint8)
+    _, buffer = cv2.imencode('.jpg', img)
     return Response(buffer.tobytes(), mimetype='image/jpeg')
 @app.route('/api/debug_frame')
 def debug_frame(): return latest_frame()
