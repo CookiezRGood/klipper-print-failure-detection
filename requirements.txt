@@ -1,5 +1,5 @@
 flask
-numpy
 requests
 opencv-python-headless
-tflite-runtime
+ultralytics
+psutil
