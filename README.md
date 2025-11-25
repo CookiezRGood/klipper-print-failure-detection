@@ -25,3 +25,18 @@ Clone this repository to your printer and install:
 - Open your browser and go to http://YOUR-IP:7126 to see the dashboard
 - Open the settings and input your printer camera ip (Default uses MJPEG style: /webcam/?action=snapshot)
 - Adjust any other settings to your preference with testing to make sure it works well for your setup (works best with a static camera with no moving background)
+
+
+## Automatic Updates
+
+Add the following to your moonraker.conf to receive automatic updates:
+
+```bash
+[update_manager klipper-print-failure-detection]
+type: git_repo
+path: ~/klipper/klippy/extras/klipper-print-failure-detection
+origin: https://github.com/CookiezRGood/klipper-print-failure-detection.git
+install_script: install.sh
+primary_branch: main
+managed_services: klipper-print-failure-detection
+```
