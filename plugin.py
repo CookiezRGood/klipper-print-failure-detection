@@ -8,15 +8,22 @@ import json
 import os
 from flask import Flask, jsonify, request, Response, send_from_directory
 
+# --- LOGGING SETUP ---
+# 1. Silence the noisy HTTP server logs
+# This prevents the "GET /api/latest_frame 200" spam
+log = logging.getLogger('werkzeug')
+log.disabled = True
+
+# 2. Configure our main logger to show only Plugin info
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.info(">>> STARTING PLUGIN: SILENT MODE <<<")
+
 # Import YOLO Engine
 try:
     from ultralytics import YOLO
 except ImportError:
     logging.warning("CRITICAL: Ultralytics not found. AI will not work.")
     YOLO = None
-
-logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN: PERFORMANCE LOGGING <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -124,7 +131,7 @@ def background_monitor():
 
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
-            # Fetch Image
+            # Always fetch image
             resp = requests.get(config['camera_url'], timeout=2)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
@@ -149,20 +156,9 @@ def background_monitor():
             
             if model:
                 user_conf = float(config.get("ai_threshold", 0.5))
-                
-                # --- PERFORMANCE TIMER START ---
-                start_time = time.time()
-                
                 results = model(state["latest_frame"], conf=user_conf, verbose=False)
-                
-                # --- PERFORMANCE TIMER END ---
-                duration = time.time() - start_time
-                
-                # Log time only if it's slow (>1s) to avoid spamming too much
-                if duration > 1.0:
-                    logging.info(f"PERFORMANCE: Inference took {duration:.2f} seconds")
-                
                 result = results[0]
+                
                 state["annotated_frame"] = result.plot()
                 
                 box_count = len(result.boxes)
