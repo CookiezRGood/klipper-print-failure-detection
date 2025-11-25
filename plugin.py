@@ -15,7 +15,7 @@ except ImportError:
     def ssim(img1, img2): return 1.0
 
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN: TEMPLATE MATCHING <<<")
+logging.info(">>> STARTING PLUGIN: INTRUDER DETECTION <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -26,7 +26,7 @@ default_config = {
     "moonraker_url": "http://127.0.0.1:7125",
     "check_interval": 200,
     "ssim_threshold": 0.85,
-    "mask_margin": 20,
+    "mask_padding": -10,        # Negative numbers SHRINK the mask (tighter fit)
     "max_mask_percent": 0.25,
     "consecutive_failures": 3,
     "on_failure": "pause",
@@ -60,9 +60,8 @@ state = {
     "ref_mask": None,
     "active_mask": None,
     
-    # TEMPLATE MATCHING STATE
-    "toolhead_template": None,  # The saved image of the toolhead
-    "template_bbox": None,      # (x, y, w, h) of the template
+    "toolhead_template": None,
+    "template_bbox": None,
     
     "current_ssim": 1.0,
     "failure_count": 0,
@@ -70,11 +69,9 @@ state = {
     "monitoring_active": False 
 }
 
-# --- API TRIGGERS ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
-    # Reset all learning
     state["last_stable_frame"] = None 
     state["ref_mask"] = None
     state["active_mask"] = None
@@ -166,7 +163,6 @@ def background_monitor():
                 continue
 
             # --- ACTIVE DETECTION ---
-            dilate_kernel = np.ones((int(config['mask_margin']), int(config['mask_margin'])), np.uint8)
             resp = requests.get(config['camera_url'], timeout=2)
             
             if resp.status_code == 200:
@@ -178,9 +174,8 @@ def background_monitor():
                 height, width = img.shape[:2]
 
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                # Less blur for template matching to preserve details
                 gray_sharp = cv2.GaussianBlur(gray, (5, 5), 0) 
-                gray = cv2.GaussianBlur(gray, (21, 21), 0) # Keep heavy blur for motion
+                gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
                 if state["previous_gray"] is None:
                     state["previous_gray"] = gray
@@ -189,7 +184,7 @@ def background_monitor():
 
                 frame_delta = cv2.absdiff(state["previous_gray"], gray)
                 thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
-                mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
+                mask_dilated = cv2.dilate(thresh, np.ones((20,20), np.uint8), iterations=2)
                 mask_coverage = cv2.countNonZero(mask_dilated) / (height * width)
 
                 if state["last_stable_frame"] is None:
@@ -203,69 +198,66 @@ def background_monitor():
                     state["status"] = "monitoring"
                     state["current_ssim"] = 1.0 
                     
-                    # 1. Capture potential mask from motion
-                    temp_active_mask = mask_dilated.copy()
-                    
-                    # 2. Find the bounding box of this motion
-                    contours, _ = cv2.findContours(temp_active_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     
                     valid_toolhead = False
                     
                     if contours:
-                        # Find the largest moving object
                         c = max(contours, key=cv2.contourArea)
                         x, y, w, h = cv2.boundingRect(c)
                         
-                        # A. LEARN PHASE: If no template exists, assume this first motion IS the toolhead
+                        # A. LEARN PHASE
                         if state["toolhead_template"] is None:
-                            if w > 20 and h > 20: # Ignore tiny noise
+                            if w > 20 and h > 20:
                                 state["toolhead_template"] = gray_sharp[y:y+h, x:x+w].copy()
                                 state["template_bbox"] = (w, h)
                                 valid_toolhead = True
                                 cv2.putText(debug_img, "LEARNING TOOLHEAD...", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
                         
-                        # B. SEARCH PHASE: Look for the known template in the current frame
+                        # B. SEARCH PHASE
                         else:
                             try:
                                 res = cv2.matchTemplate(gray_sharp, state["toolhead_template"], cv2.TM_CCOEFF_NORMED)
                                 min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
                                 
-                                # max_val is the score (0.0 to 1.0)
-                                # If match > 0.6, we found the toolhead!
                                 if max_val > 0.6:
                                     valid_toolhead = True
-                                    
-                                    # Draw box where we found it
                                     top_left = max_loc
                                     tw, th = state["template_bbox"]
-                                    cv2.rectangle(debug_img, top_left, (top_left[0] + tw, top_left[1] + th), (0, 255, 0), 2)
-                                    cv2.putText(debug_img, f"TOOLHEAD FOUND ({max_val:.2f})", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                                     
-                                    # EVOLUTION: Update template slightly to adapt to Z-height changes or angles
-                                    # We blend 95% old template with 5% new image
+                                    # --- TIGHT MASK LOGIC ---
+                                    # Apply the mask padding to shrink the box
+                                    pad = int(config.get("mask_padding", -10))
+                                    mx, my, mw, mh = top_left[0], top_left[1], tw, th
+                                    
+                                    # Apply padding (Shrink if negative)
+                                    mx -= pad
+                                    my -= pad
+                                    mw += (pad * 2)
+                                    mh += (pad * 2)
+                                    
+                                    # Ensure boundaries
+                                    mx, my = max(0, mx), max(0, my)
+                                    mw, mh = min(width-mx, mw), min(height-my, mh)
+
+                                    # Create the Precise Mask
+                                    tight_mask = np.zeros_like(mask_dilated)
+                                    cv2.rectangle(tight_mask, (mx, my), (mx+mw, my+mh), 255, -1)
+                                    state["active_mask"] = tight_mask
+
+                                    # Update Template (Evolution)
                                     new_crop = gray_sharp[top_left[1]:top_left[1]+th, top_left[0]:top_left[0]+tw]
                                     if new_crop.shape == state["toolhead_template"].shape:
                                         cv2.addWeighted(state["toolhead_template"], 0.95, new_crop, 0.05, 0, state["toolhead_template"])
                                     
-                                    # REGENERATE MASK based on where we found it (Precise Masking)
-                                    # Instead of using the messy motion blob, we mask exactly where the template matched
-                                    clean_mask = np.zeros_like(mask_dilated)
-                                    cv2.rectangle(clean_mask, top_left, (top_left[0] + tw, top_left[1] + th), 255, -1)
-                                    # Dilate slightly for safety margin
-                                    temp_active_mask = cv2.dilate(clean_mask, dilate_kernel, iterations=1)
-
+                                    cv2.putText(debug_img, f"TOOLHEAD LOCKED ({max_val:.2f})", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                                 else:
                                     cv2.putText(debug_img, f"UNKNOWN OBJECT ({max_val:.2f})", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                            except Exception:
-                                pass
+                            except Exception: pass
 
-                    # 3. Commit the Mask if Valid
-                    if valid_toolhead:
-                        state["active_mask"] = temp_active_mask
-                    else:
-                        # If it's not the toolhead (e.g. hand), we DO NOT mask it.
-                        # Ideally, we want to clear it so the Intruder is exposed.
-                        pass 
+                    # Draw Motion Blobs
+                    cv2.drawContours(debug_img, contours, -1, (0, 255, 0), 2)
+                    cv2.putText(debug_img, "Motion Tracking...", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
                 # --- STILL (CHECKING) ---
                 else:
@@ -274,29 +266,31 @@ def background_monitor():
                     if state["active_mask"] is None:
                         state["active_mask"] = np.zeros_like(gray)
                     
-                    # Double Blind Masking
                     combined_mask = cv2.bitwise_or(state["active_mask"], state["ref_mask"])
                     
+                    # 1. CHECK FOR INTRUDERS (Diff outside mask)
+                    diff = cv2.absdiff(gray, state["last_stable_frame"])
+                    diff[combined_mask > 0] = 0 # Ignore toolhead areas
+                    _, diff_thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
+                    
+                    intruder_pixels = cv2.countNonZero(diff_thresh)
+                    intruder_percent = intruder_pixels / (width * height)
+                    
+                    # 2. SSIM CHECK
                     gray_masked = gray.copy()
                     ref_masked = state["last_stable_frame"].copy()
                     gray_masked[combined_mask > 0] = 0
                     ref_masked[combined_mask > 0] = 0
-
                     score = ssim(gray_masked, ref_masked)
                     state["current_ssim"] = score
-                    threshold = float(config["ssim_threshold"])
 
-                    if score >= threshold:
-                        # Match
-                        state["failure_count"] = 0
-                        state["last_stable_frame"] = gray 
-                        state["ref_mask"] = state["active_mask"].copy() 
-                        
-                        debug_img[combined_mask > 0] = 0 
-                        cv2.putText(debug_img, f"MATCH: {int(score*100)}%", (10, 30), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                    else:
-                        # Mismatch
+                    # --- DECISION LOGIC ---
+                    # Fail if SSIM is low OR if Intruder Pixels are high
+                    is_intruder = intruder_percent > 0.01 # 1% change on bed is significant
+                    is_ssim_fail = score < float(config["ssim_threshold"])
+
+                    if is_intruder or is_ssim_fail:
+                        # FAILURE
                         if state["failure_count"] < int(config["consecutive_failures"]):
                             state["failure_count"] += 1
                         
@@ -304,9 +298,23 @@ def background_monitor():
                             state["status"] = "failure_detected"
                             trigger_printer_action()
                         
-                        debug_img[combined_mask > 0] = 0
-                        cv2.putText(debug_img, f"MISMATCH: {int(score*100)}%", (10, 30), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                        # VISUALIZE THE INTRUDER
+                        debug_img[combined_mask > 0] = 0 # Draw black mask
+                        # Draw red contours around the change
+                        cnts, _ = cv2.findContours(diff_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        cv2.drawContours(debug_img, cnts, -1, (0, 0, 255), 2)
+                        
+                        msg = f"INTRUDER!" if is_intruder else f"SSIM FAIL: {int(score*100)}%"
+                        cv2.putText(debug_img, msg, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                    
+                    else:
+                        # SUCCESS (Safe to update reference)
+                        state["failure_count"] = 0
+                        state["last_stable_frame"] = gray 
+                        state["ref_mask"] = state["active_mask"].copy() 
+                        
+                        debug_img[combined_mask > 0] = 0 
+                        cv2.putText(debug_img, f"MATCH: {int(score*100)}%", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
                 state["previous_gray"] = gray
                 state["debug_frame"] = debug_img
@@ -323,7 +331,7 @@ def background_monitor():
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
-# --- ROUTES ---
+# --- ROUTES (Unchanged) ---
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 
