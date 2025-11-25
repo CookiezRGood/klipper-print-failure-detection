@@ -28,27 +28,32 @@ async function updateStatus() {
         const res = await fetch('/api/status');
         const data = await res.json();
         
-        // Clean up status text for UI
+        // Clean status text
         const statusText = data.status.toUpperCase().replace('_', ' ');
         statusBadge.innerText = statusText;
         
-        // Color Logic
+        // --- BUTTON VISIBILITY ---
+        // Always show button unless connection error
+        forceStartBtn.style.display = 'inline-block';
+        
+        // --- COLOR & BUTTON TEXT LOGIC ---
         if (data.status === 'failure_detected' || data.status === 'error') {
             statusBadge.style.backgroundColor = '#F44336'; 
-        } else if (data.status === 'monitoring') {
+            forceStartBtn.innerText = "■ Stop Monitoring";
+        } else if (data.status === 'monitoring' || data.status === 'checking') {
             statusBadge.style.backgroundColor = '#4CAF50'; 
+            forceStartBtn.innerText = "■ Stop Monitoring";
         } else if (data.status === 'idle') {
             statusBadge.style.backgroundColor = '#555555'; 
-            forceStartBtn.style.display = 'none'; // Hide button if idle
-        } else if (data.status === 'awaiting_macro') {
-            statusBadge.style.backgroundColor = '#2196F3'; // Blue
-            forceStartBtn.style.display = 'inline-block'; // Show start button
             forceStartBtn.innerText = "▶ Start Monitoring";
+        } else if (data.status === 'awaiting_macro') {
+            statusBadge.style.backgroundColor = '#2196F3'; 
+            forceStartBtn.innerText = "▶ Force Start";
         } else if (data.status === 'connection_error') {
             statusBadge.style.backgroundColor = '#9E9E9E'; 
+            forceStartBtn.style.display = 'none';
         } else {
             statusBadge.style.backgroundColor = '#f39c12'; 
-            forceStartBtn.innerText = "■ Stop Monitoring";
         }
 
         const ssimPercent = Math.round(data.ssim * 100);
@@ -66,8 +71,8 @@ setInterval(updateStatus, 1000);
 
 // --- MANUAL START BUTTON ---
 forceStartBtn.addEventListener('click', async () => {
-    // If we are waiting, start. If we are running, stop.
     const currentText = forceStartBtn.innerText;
+    // Check if we are starting or stopping based on current text/state
     if(currentText.includes("Start")) {
         await fetch('/api/action/start');
     } else {
@@ -75,7 +80,7 @@ forceStartBtn.addEventListener('click', async () => {
     }
 });
 
-// --- SETTINGS MANAGEMENT ---
+// --- SETTINGS ---
 document.getElementById('open-settings-btn').addEventListener('click', async () => {
     const res = await fetch('/api/settings');
     const data = await res.json();
