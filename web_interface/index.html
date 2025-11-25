@@ -17,12 +17,7 @@
             <div class="camera-section">
                 <div class="camera-header">
                     <h3>Live Monitor</h3>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="debug-toggle">
-                        <span class="slider"></span>
-                        <span class="label-text">Show Mask</span>
-                    </label>
-                </div>
+                    </div>
                 <div id="camera-container">
                     <img id="live-image" class="live-feed" alt="Waiting..." />
                 </div>
@@ -30,7 +25,7 @@
 
             <div class="health-section">
                 <div class="health-header">
-                    <span>Confidence: <span id="ssim-val">--%</span></span>
+                    <span>Failure Probability: <span id="ssim-val">--%</span></span>
                     <span>Retries: <span id="retry-val">0/0</span></span>
                 </div>
                 <div class="progress-track">
@@ -76,29 +71,23 @@
             </div>
 
             <div class="setting-group">
-                <h4>Detection Logic</h4>
+                <h4>AI Detection Logic</h4>
                 <div class="setting-row">
                     <label>Check Interval (ms):</label>
-                    <input type="number" id="check_interval" step="50" min="50">
+                    <input type="number" id="check_interval" step="100" min="500">
                 </div>
                 <p class="help-text">
-                    Note: To see smoother video, this must be equal to or lower than the UI Refresh Rate.
+                    How often to run the AI check. Higher values (2000ms+) use less CPU.
                 </p>
 
                 <div class="setting-row">
-                    <label>SSIM Threshold (0.0 - 1.0):</label>
-                    <input type="number" id="ssim_threshold" step="0.01" max="1">
+                    <label>Failure Threshold (0.0 - 1.0):</label>
+                    <input type="number" id="ai_threshold" step="0.05" max="1">
                 </div>
                 <p class="help-text">
-                    Controls sensitivity to changes. <br>
-                    <strong>Higher (0.95+)</strong> = High Sensitivity (Strict). <br>
-                    <strong>Lower (0.80-)</strong> = Low Sensitivity (Forgiving).
+                    <strong>Higher (0.80+)</strong> = Strict (Needs obvious spaghetti). <br>
+                    <strong>Lower (0.40-)</strong> = Sensitive (May trigger on messy infill).
                 </p>
-
-                <div class="setting-row">
-                    <label>Mask Margin (px):</label>
-                    <input type="number" id="mask_margin" step="1">
-                </div>
             </div>
 
             <div class="setting-group">
