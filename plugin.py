@@ -20,7 +20,6 @@ app = Flask(__name__, static_folder='web_interface')
 
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 
-# Defaults
 default_config = {
     "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
     "moonraker_url": "http://127.0.0.1:7125", 
@@ -29,10 +28,9 @@ default_config = {
     "mask_margin": 15,
     "max_mask_percent": 0.25,
     "consecutive_failures": 3,
-    "on_failure": "pause" # Options: 'nothing', 'pause', 'cancel'
+    "on_failure": "pause" 
 }
 
-# Load Settings
 config = default_config.copy()
 if os.path.exists(SETTINGS_FILE):
     try:
@@ -54,12 +52,12 @@ state = {
     "last_stable_frame": None,
     "current_ssim": 1.0,
     "failure_count": 0,
-    "action_triggered": False # Prevents spamming the printer with Pause commands
+    "action_triggered": False 
 }
 
 # --- MOONRAKER INTEGRATION ---
 def trigger_printer_action():
-    if state["action_triggered"]: return # Already handled
+    if state["action_triggered"]: return 
 
     action = config.get("on_failure", "nothing")
     url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
@@ -67,12 +65,18 @@ def trigger_printer_action():
     log_info(f"FAILURE CONFIRMED. Executing action: {action}")
 
     try:
+        # 1. ALWAYS send a message to the Mainsail Console
+        # We use M118 (Respond) to print to the terminal
+        console_msg = f"M118 >>> FAILURE DETECTED! Action: {action.upper()} <<<"
+        requests.post(f"{url}/printer/gcode/script", json={"script": console_msg})
+
+        # 2. Execute the specific action
         if action == "pause":
             requests.post(f"{url}/printer/print/pause")
         elif action == "cancel":
             requests.post(f"{url}/printer/print/cancel")
         
-        # Mark as triggered so we don't repeat
+        # Mark as triggered
         state["action_triggered"] = True
         
     except Exception as e:
@@ -108,12 +112,12 @@ def background_monitor():
                 mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
                 mask_coverage = cv2.countNonZero(mask_dilated) / (height * width)
 
-                # MOTION DETECTED
+                # MOTION
                 if mask_coverage > 0.001:
                     state["status"] = "monitoring"
                     state["current_ssim"] = 1.0
                     state["failure_count"] = 0
-                    state["action_triggered"] = False # Reset trigger if we start moving again
+                    state["action_triggered"] = False # Reset Trigger
                     state["last_stable_frame"] = gray 
                     
                     contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -125,7 +129,7 @@ def background_monitor():
                             x, y, w, h = cv2.boundingRect(c)
                             cv2.putText(debug_img, "Motion", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-                # STILL (Check for failure)
+                # STILL
                 else:
                     if state["last_stable_frame"] is not None:
                         score = ssim(gray, state["last_stable_frame"])
@@ -137,7 +141,7 @@ def background_monitor():
                             
                             if state["failure_count"] >= int(config["consecutive_failures"]):
                                 state["status"] = "failure_detected"
-                                trigger_printer_action() # <--- FIRE THE ACTION
+                                trigger_printer_action()
                         else:
                             state["failure_count"] = 0
                             state["status"] = "checking"
