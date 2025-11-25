@@ -8,7 +8,6 @@ import json
 import os
 from flask import Flask, jsonify, request, send_from_directory, Response
 
-# Import SSIM logic
 try:
     from core.detection import ssim
 except ImportError:
@@ -19,40 +18,34 @@ logging.info("Starting Print Failure Detection Plugin...")
 
 app = Flask(__name__, static_folder='web_interface')
 
-# --- CONFIGURATION MANAGEMENT ---
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 
-# 1. Universal Defaults (The "Generic Base")
+# Defaults
 default_config = {
-    "camera_url": "http://YOUR_PRINTER_IP/webcam/?action=snapshot",
+    "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
+    "moonraker_url": "http://127.0.0.1:7125", 
     "check_interval": 0.5,
     "ssim_threshold": 0.90,
-    "stillness_threshold": 0.20,
     "mask_margin": 15,
     "max_mask_percent": 0.25,
-    "consecutive_failures": 3
+    "consecutive_failures": 3,
+    "on_failure": "pause" # Options: 'nothing', 'pause', 'cancel'
 }
 
-# 2. Load User Settings (Persistent)
+# Load Settings
 config = default_config.copy()
 if os.path.exists(SETTINGS_FILE):
     try:
         with open(SETTINGS_FILE, 'r') as f:
-            user_settings = json.load(f)
-            config.update(user_settings)
-            logging.info("Loaded user settings.")
-    except Exception as e:
-        logging.error(f"Failed to load settings file: {e}")
+            config.update(json.load(f))
+    except Exception: pass
 
 def save_config_to_file():
     try:
         with open(SETTINGS_FILE, 'w') as f:
             json.dump(config, f, indent=4)
-        logging.info("Settings saved to disk.")
-    except Exception as e:
-        logging.error(f"Failed to save settings: {e}")
+    except Exception: pass
 
-# --- GLOBAL STATE ---
 state = {
     "latest_frame": None,
     "debug_frame": None,
@@ -60,18 +53,39 @@ state = {
     "previous_gray": None,
     "last_stable_frame": None,
     "current_ssim": 1.0,
-    "failure_count": 0
+    "failure_count": 0,
+    "action_triggered": False # Prevents spamming the printer with Pause commands
 }
+
+# --- MOONRAKER INTEGRATION ---
+def trigger_printer_action():
+    if state["action_triggered"]: return # Already handled
+
+    action = config.get("on_failure", "nothing")
+    url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
+    
+    log_info(f"FAILURE CONFIRMED. Executing action: {action}")
+
+    try:
+        if action == "pause":
+            requests.post(f"{url}/printer/print/pause")
+        elif action == "cancel":
+            requests.post(f"{url}/printer/print/cancel")
+        
+        # Mark as triggered so we don't repeat
+        state["action_triggered"] = True
+        
+    except Exception as e:
+        log_info(f"Failed to send command to Moonraker: {e}")
 
 def background_monitor():
     log_info("Background monitor started.")
     
     while True:
         try:
-            # Update Kernel based on current margin setting
             dilate_kernel = np.ones((int(config['mask_margin']), int(config['mask_margin'])), np.uint8)
-            
             resp = requests.get(config['camera_url'], timeout=2)
+            
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
                 img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
@@ -79,9 +93,7 @@ def background_monitor():
                 state["latest_frame"] = img.copy()
                 debug_img = img.copy()
                 height, width = img.shape[:2]
-                total_pixels = height * width
 
-                # Motion Detection
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
@@ -94,32 +106,27 @@ def background_monitor():
                 frame_delta = cv2.absdiff(state["previous_gray"], gray)
                 thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
                 mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
+                mask_coverage = cv2.countNonZero(mask_dilated) / (height * width)
 
-                mask_pixels = cv2.countNonZero(mask_dilated)
-                mask_coverage = mask_pixels / total_pixels
-
-                # Logic Fork
+                # MOTION DETECTED
                 if mask_coverage > 0.001:
-                    # MOTION: Reset and Monitor
                     state["status"] = "monitoring"
                     state["current_ssim"] = 1.0
                     state["failure_count"] = 0
+                    state["action_triggered"] = False # Reset trigger if we start moving again
                     state["last_stable_frame"] = gray 
                     
                     contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     if contours:
                         large_contours = [c for c in contours if cv2.contourArea(c) > 500]
-                        overlay = debug_img.copy()
-                        cv2.drawContours(overlay, large_contours, -1, (0, 255, 0), -1)
-                        cv2.addWeighted(overlay, 0.3, debug_img, 0.7, 0, debug_img)
-                        
+                        cv2.drawContours(debug_img, large_contours, -1, (0, 255, 0), 2)
                         if large_contours:
                             c = max(large_contours, key=cv2.contourArea)
                             x, y, w, h = cv2.boundingRect(c)
-                            cv2.putText(debug_img, "Mask Active", (x, y - 10), 
-                                      cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                            cv2.putText(debug_img, "Motion", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+                # STILL (Check for failure)
                 else:
-                    # STILL: Check SSIM
                     if state["last_stable_frame"] is not None:
                         score = ssim(gray, state["last_stable_frame"])
                         state["current_ssim"] = score
@@ -130,6 +137,7 @@ def background_monitor():
                             
                             if state["failure_count"] >= int(config["consecutive_failures"]):
                                 state["status"] = "failure_detected"
+                                trigger_printer_action() # <--- FIRE THE ACTION
                         else:
                             state["failure_count"] = 0
                             state["status"] = "checking"
@@ -140,14 +148,12 @@ def background_monitor():
             else:
                 state["status"] = "camera_error"
 
-        except Exception as e:
-            # If camera fails (e.g., wrong IP), we don't crash, just wait
+        except Exception:
             state["status"] = "connection_error"
         
         time.sleep(float(config["check_interval"]))
 
-def log_info(msg):
-    logging.info(msg)
+def log_info(msg): logging.info(msg)
 
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
@@ -161,9 +167,8 @@ def serve_static(path): return send_from_directory('web_interface', path)
 @app.route('/api/settings', methods=['GET', 'POST'])
 def settings():
     if request.method == 'POST':
-        data = request.json
-        config.update(data)
-        save_config_to_file() # Save to disk immediately
+        config.update(request.json)
+        save_config_to_file()
         return jsonify({"status": "saved", "config": config})
     return jsonify(config)
 
@@ -178,23 +183,13 @@ def get_status():
 
 @app.route('/api/latest_frame')
 def latest_frame():
-    img = state["latest_frame"]
-    if img is None: 
-        # Return a black image if no camera found yet
-        blank = np.zeros((360, 640, 3), np.uint8)
-        _, buffer = cv2.imencode('.jpg', blank)
-        return Response(buffer.tobytes(), mimetype='image/jpeg')
+    img = state["latest_frame"] if state["latest_frame"] is not None else np.zeros((360, 640, 3), np.uint8)
     _, buffer = cv2.imencode('.jpg', img)
     return Response(buffer.tobytes(), mimetype='image/jpeg')
 
 @app.route('/api/debug_frame')
 def debug_frame():
-    img = state["debug_frame"]
-    if img is None: 
-        blank = np.zeros((360, 640, 3), np.uint8)
-        cv2.putText(blank, "NO SIGNAL", (50, 180), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
-        _, buffer = cv2.imencode('.jpg', blank)
-        return Response(buffer.tobytes(), mimetype='image/jpeg')
+    img = state["debug_frame"] if state["debug_frame"] is not None else np.zeros((360, 640, 3), np.uint8)
     _, buffer = cv2.imencode('.jpg', img)
     return Response(buffer.tobytes(), mimetype='image/jpeg')
 
