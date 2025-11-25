@@ -22,10 +22,18 @@ async function updateStatus() {
         
         statusBadge.innerText = data.status.toUpperCase();
         
-        if (data.status === 'failure_detected' || data.status === 'error') statusBadge.style.backgroundColor = '#F44336';
-        else if (data.status === 'monitoring') statusBadge.style.backgroundColor = '#4CAF50';
-        else if (data.status === 'connection_error') statusBadge.style.backgroundColor = '#9E9E9E';
-        else statusBadge.style.backgroundColor = '#f39c12';
+        // --- STATUS COLOR LOGIC ---
+        if (data.status === 'failure_detected' || data.status === 'error') {
+            statusBadge.style.backgroundColor = '#F44336'; // Red
+        } else if (data.status === 'monitoring') {
+            statusBadge.style.backgroundColor = '#4CAF50'; // Green
+        } else if (data.status === 'idle') {
+            statusBadge.style.backgroundColor = '#555555'; // Grey (IDLE)
+        } else if (data.status === 'connection_error') {
+            statusBadge.style.backgroundColor = '#9E9E9E'; // Lighter Grey
+        } else {
+            statusBadge.style.backgroundColor = '#f39c12'; // Orange (Checking)
+        }
 
         const ssimPercent = Math.round(data.ssim * 100);
         ssimText.innerText = `${ssimPercent}%`;
