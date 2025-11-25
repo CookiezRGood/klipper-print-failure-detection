@@ -14,7 +14,7 @@ except ImportError:
     def ssim(img1, img2): return 1.0
 
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN: DOUBLE BLIND MASKING <<<")
+logging.info(">>> STARTING PLUGIN: STATUS UPDATE FIX <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -23,9 +23,9 @@ SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 default_config = {
     "camera_url": "http://127.0.0.1/webcam/?action=snapshot",
     "moonraker_url": "http://127.0.0.1:7125",
-    "check_interval": 200,      # Faster interval for better motion tracking
+    "check_interval": 200,
     "ssim_threshold": 0.85,
-    "mask_margin": 20,          # Slightly larger margin to be safe
+    "mask_margin": 20,
     "max_mask_percent": 0.25,
     "consecutive_failures": 3,
     "on_failure": "pause",
@@ -54,23 +54,18 @@ state = {
     "debug_frame": None,
     "status": "idle",
     "previous_gray": None,
-    
-    # DOUBLE BLIND STATE VARIABLES
-    "last_stable_frame": None,  # The "Golden Standard" image
-    "ref_mask": None,           # The mask used for the Golden Standard
-    "active_mask": None,        # The currently detected toolhead position
-    
+    "last_stable_frame": None,
+    "ref_mask": None,
+    "active_mask": None,
     "current_ssim": 1.0,
     "failure_count": 0,
     "action_triggered": False,
     "monitoring_active": False 
 }
 
-# --- API TRIGGERS ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
-    # Reset everything on start
     state["last_stable_frame"] = None 
     state["ref_mask"] = None
     state["active_mask"] = None
@@ -128,12 +123,11 @@ def background_monitor():
             if klipper_state in ["complete", "error", "cancelled"]:
                 state["monitoring_active"] = False
 
-            # 2. IDLE / SLEEP LOGIC
+            # 2. IDLE CHECK
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
             if not should_run:
                 state["status"] = "idle"
-                # Reset memory
                 state["last_stable_frame"] = None 
                 state["ref_mask"] = None
                 state["active_mask"] = None
@@ -180,22 +174,19 @@ def background_monitor():
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
-                # Initialize Previous Frame
                 if state["previous_gray"] is None:
                     state["previous_gray"] = gray
                     time.sleep(0.1)
                     continue
 
-                # --- MOTION CALCULATION ---
                 frame_delta = cv2.absdiff(state["previous_gray"], gray)
                 thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
                 mask_dilated = cv2.dilate(thresh, dilate_kernel, iterations=2)
                 mask_coverage = cv2.countNonZero(mask_dilated) / (height * width)
 
-                # Initialize First Reference (Empty Mask)
                 if state["last_stable_frame"] is None:
                     state["last_stable_frame"] = gray
-                    state["ref_mask"] = np.zeros_like(gray) # No toolhead mask yet
+                    state["ref_mask"] = np.zeros_like(gray)
                     state["previous_gray"] = gray
                     continue
 
@@ -204,53 +195,42 @@ def background_monitor():
                     state["status"] = "monitoring"
                     state["current_ssim"] = 1.0 
                     
-                    # SAVE THE ACTIVE MASK (Where the head IS right now)
                     state["active_mask"] = mask_dilated.copy()
 
-                    # Draw Visualization
                     contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     cv2.drawContours(debug_img, contours, -1, (0, 255, 0), 2)
                     cv2.putText(debug_img, "Motion Tracking...", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
                 # --- IS STILL? ---
                 else:
-                    # Ensure we have masks to work with
+                    # FORCE STATUS UPDATE: We are checking now.
+                    state["status"] = "checking" 
+
                     if state["active_mask"] is None:
                         state["active_mask"] = np.zeros_like(gray)
                     
-                    # --- DOUBLE BLIND MASKING ---
-                    # 1. Combine Current Head Mask + Old Reference Head Mask
                     combined_mask = cv2.bitwise_or(state["active_mask"], state["ref_mask"])
                     
-                    # 2. Black out these areas in BOTH images
-                    # This removes the toolhead from the equation entirely
                     gray_masked = gray.copy()
                     ref_masked = state["last_stable_frame"].copy()
-                    
                     gray_masked[combined_mask > 0] = 0
                     ref_masked[combined_mask > 0] = 0
 
-                    # 3. Compare the Remaining (Print Bed) areas
                     score = ssim(gray_masked, ref_masked)
                     state["current_ssim"] = score
                     threshold = float(config["ssim_threshold"])
 
                     if score >= threshold:
-                        # --- EVOLUTION (Valid) ---
+                        # Valid Match
                         state["failure_count"] = 0
-                        state["status"] = "checking"
-                        
-                        # Update Reference to this new valid state
                         state["last_stable_frame"] = gray 
-                        state["ref_mask"] = state["active_mask"].copy() # Save THIS head position for next time
+                        state["ref_mask"] = state["active_mask"].copy() 
                         
-                        # Debug: Show what we are comparing (The Masked Result)
-                        # We overlay the masked black areas on the debug image
                         debug_img[combined_mask > 0] = 0 
                         cv2.putText(debug_img, f"MATCH: {int(score*100)}%", (10, 30), 
                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     else:
-                        # --- REVOLUTION (Failure) ---
+                        # Failure Logic
                         if state["failure_count"] < int(config["consecutive_failures"]):
                             state["failure_count"] += 1
                         
@@ -258,7 +238,6 @@ def background_monitor():
                             state["status"] = "failure_detected"
                             trigger_printer_action()
                         
-                        # Show the masked areas to prove we ignored the head
                         debug_img[combined_mask > 0] = 0
                         cv2.putText(debug_img, f"MISMATCH: {int(score*100)}%", (10, 30), 
                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
