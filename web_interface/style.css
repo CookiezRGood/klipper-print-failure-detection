@@ -203,3 +203,19 @@ input[type="text"] {
     box-sizing: border-box;
     text-align: left; /* Align URL to left */
 }
+
+select {
+    width: 100%;
+    background-color: #121212;
+    border: 1px solid #333;
+    color: white;
+    padding: 8px;
+    border-radius: 4px;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+select:focus {
+    outline: 1px solid #2196F3;
+    border-color: #2196F3;
+}
