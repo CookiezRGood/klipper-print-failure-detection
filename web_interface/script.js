@@ -1,4 +1,4 @@
-const REFRESH_RATE = 500; 
+let imageInterval; // Store the interval ID so we can stop/start it
 
 const liveImage = document.getElementById('live-image');
 const debugToggle = document.getElementById('debug-toggle');
@@ -9,13 +9,24 @@ const retryText = document.getElementById('retry-val');
 const confidenceBar = document.getElementById('confidence-bar');
 const camContainer = document.getElementById('camera-container');
 
-function refreshImage() {
-    const timestamp = new Date().getTime();
-    const endpoint = debugToggle.checked ? '/api/debug_frame' : '/api/latest_frame';
-    liveImage.src = `${endpoint}?t=${timestamp}`;
+// --- DYNAMIC IMAGE REFRESH LOOP ---
+function startImageLoop(rate) {
+    if (imageInterval) clearInterval(imageInterval);
+    
+    // Default to 500ms if invalid
+    const safeRate = (rate && rate >= 100) ? rate : 500;
+    
+    imageInterval = setInterval(() => {
+        const timestamp = new Date().getTime();
+        const endpoint = debugToggle.checked ? '/api/debug_frame' : '/api/latest_frame';
+        liveImage.src = `${endpoint}?t=${timestamp}`;
+    }, safeRate);
 }
-setInterval(refreshImage, REFRESH_RATE);
 
+// Start with default, will update when settings load
+startImageLoop(500);
+
+// --- STATUS LOOP (Always 1s) ---
 async function updateStatus() {
     try {
         const res = await fetch('/api/status');
@@ -48,7 +59,7 @@ async function updateStatus() {
 }
 setInterval(updateStatus, 1000);
 
-// LOAD SETTINGS (AND APPLY ASPECT RATIO)
+// --- SETTINGS MANAGEMENT ---
 document.getElementById('open-settings-btn').addEventListener('click', async () => {
     const res = await fetch('/api/settings');
     const data = await res.json();
@@ -61,11 +72,9 @@ document.getElementById('open-settings-btn').addEventListener('click', async () 
     document.getElementById('consecutive_failures').value = data.consecutive_failures;
     document.getElementById('on_failure').value = data.on_failure || "nothing";
     document.getElementById('aspect_ratio').value = data.aspect_ratio || "16:9";
+    document.getElementById('preview_refresh_rate').value = data.preview_refresh_rate || 500;
     
-    // Apply Aspect Ratio Immediately on Load
-    if(data.aspect_ratio) {
-        camContainer.style.aspectRatio = data.aspect_ratio.replace(':', '/');
-    }
+    if(data.aspect_ratio) camContainer.style.aspectRatio = data.aspect_ratio.replace(':', '/');
 
     settingsModal.showModal();
 });
@@ -73,6 +82,8 @@ document.getElementById('open-settings-btn').addEventListener('click', async () 
 document.getElementById('close-modal-x').addEventListener('click', () => settingsModal.close());
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
+    const newRate = parseInt(document.getElementById('preview_refresh_rate').value);
+    
     const payload = {
         camera_url: document.getElementById('camera_url').value,
         moonraker_url: document.getElementById('moonraker_url').value,
@@ -81,7 +92,8 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         mask_margin: parseInt(document.getElementById('mask_margin').value),
         consecutive_failures: parseInt(document.getElementById('consecutive_failures').value),
         on_failure: document.getElementById('on_failure').value,
-        aspect_ratio: document.getElementById('aspect_ratio').value
+        aspect_ratio: document.getElementById('aspect_ratio').value,
+        preview_refresh_rate: newRate
     };
     
     await fetch('/api/settings', {
@@ -90,14 +102,16 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         body: JSON.stringify(payload)
     });
     
-    // Apply new ratio immediately locally
+    // Apply visual changes immediately
     camContainer.style.aspectRatio = payload.aspect_ratio.replace(':', '/');
+    startImageLoop(newRate); // <--- Update the refresh rate immediately!
     
     alert("Configuration Saved!");
     settingsModal.close();
 });
 
-// Init: Fetch settings once to set aspect ratio on load (without opening modal)
+// INITIAL LOAD
 fetch('/api/settings').then(r => r.json()).then(data => {
     if(data.aspect_ratio) camContainer.style.aspectRatio = data.aspect_ratio.replace(':', '/');
+    if(data.preview_refresh_rate) startImageLoop(data.preview_refresh_rate);
 });
