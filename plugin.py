@@ -6,7 +6,7 @@ import numpy as np
 import requests
 import json
 import os
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request, Response, send_from_directory
 
 # Import YOLO Engine
 try:
@@ -161,11 +161,12 @@ def background_monitor():
                 # plot() returns the image with boxes drawn
                 state["annotated_frame"] = result.plot()
                 
-                # 2. Count Detections
+                # 2. Check for failures
+                # We count how many boxes it found. 0 boxes = Good. >0 boxes = Spaghetti.
                 box_count = len(result.boxes)
                 
                 if box_count > 0:
-                    # We found something!
+                    # Get the highest confidence score
                     top_conf = float(result.boxes.conf[0])
                     state["failure_score"] = top_conf
                     
@@ -176,7 +177,6 @@ def background_monitor():
                         state["status"] = "failure_detected"
                         trigger_printer_action()
                 else:
-                    # Clean bed
                     state["failure_score"] = 0.0
                     state["failure_count"] = 0
 
