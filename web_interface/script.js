@@ -1,6 +1,5 @@
-let imageInterval; // Store the interval ID so we can stop/start it
+let imageInterval; 
 
-// DOM Elements
 const liveImage = document.getElementById('live-image');
 const debugToggle = document.getElementById('debug-toggle');
 const statusBadge = document.getElementById('status-indicator');
@@ -9,74 +8,78 @@ const ssimText = document.getElementById('ssim-val');
 const retryText = document.getElementById('retry-val');
 const confidenceBar = document.getElementById('confidence-bar');
 const camContainer = document.getElementById('camera-container');
+const forceStartBtn = document.getElementById('force-start-btn');
 
-// --- DYNAMIC IMAGE REFRESH LOOP ---
 function startImageLoop(rate) {
-    // Stop the old loop if it exists
     if (imageInterval) clearInterval(imageInterval);
-    
-    // Safety: Default to 500ms if invalid or too fast (<100ms)
     const safeRate = (rate && rate >= 100) ? rate : 500;
     
     imageInterval = setInterval(() => {
         const timestamp = new Date().getTime();
-        // Choose endpoint based on toggle: Normal or Debug (Mask)
         const endpoint = debugToggle.checked ? '/api/debug_frame' : '/api/latest_frame';
         liveImage.src = `${endpoint}?t=${timestamp}`;
     }, safeRate);
 }
 
-// Start with default, will update when settings load
 startImageLoop(500);
 
-// --- STATUS LOOP (Always 1 second) ---
 async function updateStatus() {
     try {
         const res = await fetch('/api/status');
         const data = await res.json();
         
-        // 1. Update Badge Text
-        statusBadge.innerText = data.status.toUpperCase();
+        // Clean up status text for UI
+        const statusText = data.status.toUpperCase().replace('_', ' ');
+        statusBadge.innerText = statusText;
         
-        // 2. Update Badge Color based on State
+        // Color Logic
         if (data.status === 'failure_detected' || data.status === 'error') {
-            statusBadge.style.backgroundColor = '#F44336'; // Red
+            statusBadge.style.backgroundColor = '#F44336'; 
         } else if (data.status === 'monitoring') {
-            statusBadge.style.backgroundColor = '#4CAF50'; // Green
+            statusBadge.style.backgroundColor = '#4CAF50'; 
         } else if (data.status === 'idle') {
-            statusBadge.style.backgroundColor = '#555555'; // Grey (IDLE)
+            statusBadge.style.backgroundColor = '#555555'; 
+            forceStartBtn.style.display = 'none'; // Hide button if idle
+        } else if (data.status === 'awaiting_macro') {
+            statusBadge.style.backgroundColor = '#2196F3'; // Blue
+            forceStartBtn.style.display = 'inline-block'; // Show start button
+            forceStartBtn.innerText = "▶ Start Monitoring";
         } else if (data.status === 'connection_error') {
-            statusBadge.style.backgroundColor = '#9E9E9E'; // Lighter Grey
+            statusBadge.style.backgroundColor = '#9E9E9E'; 
         } else {
-            statusBadge.style.backgroundColor = '#f39c12'; // Orange (Checking)
+            statusBadge.style.backgroundColor = '#f39c12'; 
+            forceStartBtn.innerText = "■ Stop Monitoring";
         }
 
-        // 3. Update Health Bar
         const ssimPercent = Math.round(data.ssim * 100);
         ssimText.innerText = `${ssimPercent}%`;
         retryText.innerText = `${data.failures}/${data.max_retries}`;
         confidenceBar.style.width = `${ssimPercent}%`;
 
-        // Bar Color Logic
-        if (data.failures > 0) {
-             confidenceBar.style.background = '#FF5722'; // Orange/Red warning
-        } else if (data.ssim < 0.90) {
-             confidenceBar.style.background = '#FFC107'; // Yellow warning
-        } else {
-             confidenceBar.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)'; // Green
-        }
+        if (data.failures > 0) confidenceBar.style.background = '#FF5722'; 
+        else if (data.ssim < 0.90) confidenceBar.style.background = '#FFC107'; 
+        else confidenceBar.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
 
     } catch (e) { console.log("Status error", e); }
 }
 setInterval(updateStatus, 1000);
 
+// --- MANUAL START BUTTON ---
+forceStartBtn.addEventListener('click', async () => {
+    // If we are waiting, start. If we are running, stop.
+    const currentText = forceStartBtn.innerText;
+    if(currentText.includes("Start")) {
+        await fetch('/api/action/start');
+    } else {
+        await fetch('/api/action/stop');
+    }
+});
+
 // --- SETTINGS MANAGEMENT ---
 document.getElementById('open-settings-btn').addEventListener('click', async () => {
-    // Fetch current settings from backend
     const res = await fetch('/api/settings');
     const data = await res.json();
     
-    // Populate Inputs
     document.getElementById('camera_url').value = data.camera_url;
     document.getElementById('moonraker_url').value = data.moonraker_url || "http://127.0.0.1:7125";
     document.getElementById('check_interval').value = data.check_interval;
@@ -87,29 +90,20 @@ document.getElementById('open-settings-btn').addEventListener('click', async () 
     document.getElementById('aspect_ratio').value = data.aspect_ratio || "16:9";
     document.getElementById('preview_refresh_rate').value = data.preview_refresh_rate || 500;
     
-    // Apply visual aspect ratio immediately so the user sees current state
-    if(data.aspect_ratio) {
-        camContainer.style.aspectRatio = data.aspect_ratio.replace(':', '/');
-    }
+    if(data.aspect_ratio) camContainer.style.aspectRatio = data.aspect_ratio.replace(':', '/');
 
     settingsModal.showModal();
 });
 
-document.getElementById('close-modal-x').addEventListener('click', () => {
-    settingsModal.close();
-});
+document.getElementById('close-modal-x').addEventListener('click', () => settingsModal.close());
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
-    // Capture the new refresh rate to apply it immediately
     const newRate = parseInt(document.getElementById('preview_refresh_rate').value);
     
     const payload = {
         camera_url: document.getElementById('camera_url').value,
         moonraker_url: document.getElementById('moonraker_url').value,
-        
-        // Parse as Integer (ms)
         check_interval: parseInt(document.getElementById('check_interval').value),
-        
         ssim_threshold: parseFloat(document.getElementById('ssim_threshold').value),
         mask_margin: parseInt(document.getElementById('mask_margin').value),
         consecutive_failures: parseInt(document.getElementById('consecutive_failures').value),
@@ -118,14 +112,12 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         preview_refresh_rate: newRate
     };
     
-    // Send to Python
     await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
     
-    // Apply visual changes locally immediately
     camContainer.style.aspectRatio = payload.aspect_ratio.replace(':', '/');
     startImageLoop(newRate); 
     
@@ -133,9 +125,6 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     settingsModal.close();
 });
 
-// INITIAL LOAD
-// We fetch settings once on page load to set the Aspect Ratio and Refresh Rate 
-// without needing the user to open the menu.
 fetch('/api/settings').then(r => r.json()).then(data => {
     if(data.aspect_ratio) camContainer.style.aspectRatio = data.aspect_ratio.replace(':', '/');
     if(data.preview_refresh_rate) startImageLoop(data.preview_refresh_rate);
