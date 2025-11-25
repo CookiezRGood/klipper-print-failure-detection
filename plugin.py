@@ -8,14 +8,13 @@ import json
 import os
 from flask import Flask, jsonify, request, send_from_directory, Response
 
-# Import SSIM logic
 try:
     from core.detection import ssim
 except ImportError:
     def ssim(img1, img2): return 1.0
 
 logging.basicConfig(level=logging.INFO)
-logging.info(">>> STARTING PLUGIN: MOTION RESET LOGIC <<<")
+logging.info(">>> STARTING PLUGIN: ID VERIFICATION + SIZE FIX <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
@@ -26,7 +25,7 @@ default_config = {
     "moonraker_url": "http://127.0.0.1:7125",
     "check_interval": 200,
     "ssim_threshold": 0.85,
-    "mask_margin": 0,           # Default 0, we handle logic internally now
+    "mask_margin": -10,         # Default -10 to shrink the mask
     "max_mask_percent": 0.25,
     "consecutive_failures": 3,
     "on_failure": "pause",
@@ -55,27 +54,23 @@ state = {
     "debug_frame": None,
     "status": "idle",
     "previous_gray": None,
-    
     "last_stable_frame": None,
     "ref_mask": None,
     "active_mask": None,
-    
     "toolhead_template": None,
     "template_bbox": None,
-    
     "current_ssim": 1.0,
     "failure_count": 0,
     "action_triggered": False,
-    "monitoring_active": False,
-    
-    "just_finished_motion": True # Start True so we grab the first frame as ref
+    "monitoring_active": False 
 }
 
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
     state["last_stable_frame"] = None 
-    state["just_finished_motion"] = True
+    state["ref_mask"] = None
+    state["active_mask"] = None
     state["toolhead_template"] = None
     state["failure_count"] = 0
     logging.info("Signal Received: Monitoring STARTED")
@@ -125,8 +120,8 @@ def background_monitor():
                 state["status"] = "idle"
                 state["last_stable_frame"] = None 
                 state["failure_count"] = 0
+                state["toolhead_template"] = None
                 state["action_triggered"] = False
-                state["just_finished_motion"] = True
                 
                 resp = requests.get(config['camera_url'], timeout=2)
                 if resp.status_code == 200:
@@ -150,17 +145,17 @@ def background_monitor():
                 time.sleep(1)
                 continue
 
-            # --- ACTIVE LOOP ---
+            # --- ACTIVE DETECTION ---
             resp = requests.get(config['camera_url'], timeout=2)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
                 img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                
                 state["latest_frame"] = img.copy()
                 debug_img = img.copy()
                 height, width = img.shape[:2]
 
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                # Separate streams: Sharp for ID, Blurred for Motion
                 gray_sharp = cv2.GaussianBlur(gray, (5, 5), 0) 
                 gray_motion = cv2.GaussianBlur(gray, (21, 21), 0)
 
@@ -169,111 +164,147 @@ def background_monitor():
                     time.sleep(0.1)
                     continue
 
-                # --- IMPROVED MOTION DETECTION ---
                 frame_delta = cv2.absdiff(state["previous_gray"], gray_motion)
                 thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
                 
-                # 1. ERODE FIRST (Remove cables/noise)
-                mask_clean = cv2.erode(thresh, np.ones((3,3), np.uint8), iterations=1)
-                # 2. DILATE SECOND (Connect the solid toolhead parts)
-                mask_dilated = cv2.dilate(mask_clean, np.ones((20,20), np.uint8), iterations=2)
+                # Base Dilation to connect components (cables + head)
+                # This creates the "Bloated" mask you disliked
+                mask_dilated = cv2.dilate(thresh, np.ones((15,15), np.uint8), iterations=2)
                 
                 mask_coverage = cv2.countNonZero(mask_dilated) / (height * width)
 
-                # --- STATE: MOVING ---
+                if state["last_stable_frame"] is None:
+                    state["last_stable_frame"] = gray
+                    state["ref_mask"] = np.zeros_like(gray)
+                    state["previous_gray"] = gray_motion
+                    continue
+
+                # --- MOTION PHASE ---
                 if mask_coverage > 0.001:
                     state["status"] = "monitoring"
                     state["current_ssim"] = 1.0 
-                    state["just_finished_motion"] = True  # FLAG: We are moving, so next stop is a reset
                     
-                    # Update Active Mask
-                    state["active_mask"] = mask_dilated.copy()
+                    contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                     
-                    # Update Template (Evolution)
-                    if state["toolhead_template"] is None:
-                        contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                        if contours:
-                            c = max(contours, key=cv2.contourArea)
-                            x, y, w, h = cv2.boundingRect(c)
+                    if contours:
+                        c = max(contours, key=cv2.contourArea)
+                        x, y, w, h = cv2.boundingRect(c)
+                        
+                        valid_toolhead = False
+                        
+                        # 1. IDENTIFICATION (Template Matching)
+                        if state["toolhead_template"] is None:
+                            # Learn Phase: Assume first big motion is toolhead
                             if w > 30 and h > 30:
                                 state["toolhead_template"] = gray_sharp[y:y+h, x:x+w].copy()
                                 state["template_bbox"] = (w, h)
+                                valid_toolhead = True
                                 cv2.putText(debug_img, "LEARNING TOOLHEAD...", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-                    
-                    # Draw Green Contours (Current Motion)
-                    contours, _ = cv2.findContours(mask_dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                    cv2.drawContours(debug_img, contours, -1, (0, 255, 0), 2)
-                    cv2.putText(debug_img, "Motion...", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                        else:
+                            # Search Phase
+                            try:
+                                res = cv2.matchTemplate(gray_sharp, state["toolhead_template"], cv2.TM_CCOEFF_NORMED)
+                                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+                                
+                                # Threshold 0.5 is lenient enough for angles, strict enough for hands
+                                if max_val > 0.50:
+                                    valid_toolhead = True
+                                    # Adaptive Update (Evolution)
+                                    tx, ty = max_loc
+                                    th, tw = state["toolhead_template"].shape[:2]
+                                    # Safety bounds
+                                    tx, ty = max(0, tx), max(0, ty)
+                                    tw, th = min(width-tx, tw), min(height-ty, th)
+                                    
+                                    new_crop = gray_sharp[ty:ty+th, tx:tx+tw]
+                                    if new_crop.shape == state["toolhead_template"].shape:
+                                        cv2.addWeighted(state["toolhead_template"], 0.95, new_crop, 0.05, 0, state["toolhead_template"])
+                                    
+                                    cv2.putText(debug_img, f"ID CONFIRMED ({max_val:.2f})", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                                else:
+                                    cv2.putText(debug_img, f"UNKNOWN OBJECT ({max_val:.2f})", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                            except Exception: pass
 
-                # --- STATE: STILL ---
+                        # 2. MASK GENERATION (If Valid)
+                        if valid_toolhead:
+                            # Create the base mask from the organic contour
+                            organic_mask = np.zeros_like(mask_dilated)
+                            cv2.drawContours(organic_mask, [c], -1, 255, -1)
+                            
+                            # --- APPLY USER SETTING: MASK MARGIN ---
+                            # This was ignored before due to name mismatch (padding vs margin)
+                            # Now we use config['mask_margin']
+                            margin = int(config.get("mask_margin", -10))
+                            
+                            if margin < 0:
+                                # Negative = SHRINK (Erode)
+                                kernel_size = abs(margin)
+                                kernel = np.ones((kernel_size, kernel_size), np.uint8)
+                                organic_mask = cv2.erode(organic_mask, kernel, iterations=1)
+                            elif margin > 0:
+                                # Positive = GROW (Dilate)
+                                kernel = np.ones((margin, margin), np.uint8)
+                                organic_mask = cv2.dilate(organic_mask, kernel, iterations=1)
+                            
+                            state["active_mask"] = organic_mask.copy()
+                            
+                            # Visual Feedback: Blue Outline is the FINAL mask
+                            final_cnts, _ = cv2.findContours(organic_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                            cv2.drawContours(debug_img, final_cnts, -1, (255, 0, 0), 2) 
+                        
+                        else:
+                            # If not valid toolhead, we DROP the mask.
+                            # This exposes the object to the SSIM check in the next phase.
+                            state["active_mask"] = None
+
+                # --- STILL PHASE ---
                 else:
-                    # === THE FIX: MOTION RESET LOGIC ===
-                    if state["just_finished_motion"]:
-                        # The printer just stopped moving. 
-                        # We assume this new position is valid.
-                        # We RESET the reference to this frame.
-                        state["last_stable_frame"] = gray
+                    state["status"] = "checking"
+                    
+                    # Use empty mask if toolhead wasn't found
+                    current_mask = state["active_mask"] if state["active_mask"] is not None else np.zeros_like(gray)
+                    
+                    # Double Blind
+                    combined_mask = cv2.bitwise_or(current_mask, state["ref_mask"])
+                    
+                    # SSIM Check
+                    gray_masked = gray.copy()
+                    ref_masked = state["last_stable_frame"].copy()
+                    gray_masked[combined_mask > 0] = 0
+                    ref_masked[combined_mask > 0] = 0
+                    
+                    score = ssim(gray_masked, ref_masked)
+                    state["current_ssim"] = score
+                    
+                    threshold = float(config["ssim_threshold"])
+
+                    if score >= threshold:
+                        state["failure_count"] = 0
+                        state["last_stable_frame"] = gray 
+                        # Only update reference mask if we actually saw the toolhead
                         if state["active_mask"] is not None:
                             state["ref_mask"] = state["active_mask"].copy()
-                        else:
-                            state["ref_mask"] = np.zeros_like(gray)
                         
-                        state["just_finished_motion"] = False # Reset flag
-                        state["status"] = "checking"
-                        
-                        # Show "New Position Locked"
-                        cv2.putText(debug_img, "POSITION LOCKED", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                    
-                    # === STANDARD CHECK (NO MOTION RESET) ===
+                        debug_img[combined_mask > 0] = 0 
+                        cv2.putText(debug_img, f"MATCH: {int(score*100)}%", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     else:
-                        state["status"] = "checking"
+                        if state["failure_count"] < int(config["consecutive_failures"]):
+                            state["failure_count"] += 1
+                        if state["failure_count"] >= int(config["consecutive_failures"]):
+                            state["status"] = "failure_detected"
+                            trigger_printer_action()
                         
-                        if state["active_mask"] is None: state["active_mask"] = np.zeros_like(gray)
-                        if state["ref_mask"] is None: state["ref_mask"] = np.zeros_like(gray)
-
-                        # We only need the CURRENT mask because we reset the reference
-                        # But we keep Double Masking just in case of jitter
-                        combined_mask = cv2.bitwise_or(state["active_mask"], state["ref_mask"])
+                        # Draw mask
+                        debug_img[combined_mask > 0] = 0
                         
-                        # Expand mask slightly for logic check
-                        fat_kernel = np.ones((15,15), np.uint8)
-                        fat_mask = cv2.dilate(combined_mask, fat_kernel, iterations=1)
-
-                        # 1. Intruder Check
+                        # Draw difference (Intruder)
                         diff = cv2.absdiff(gray, state["last_stable_frame"])
-                        diff[fat_mask > 0] = 0 
-                        _, diff_thresh = cv2.threshold(diff, 40, 255, cv2.THRESH_BINARY)
-                        intruder_percent = cv2.countNonZero(diff_thresh) / (width * height)
+                        diff[combined_mask > 0] = 0
+                        _, diff_t = cv2.threshold(diff, 40, 255, cv2.THRESH_BINARY)
+                        cnts, _ = cv2.findContours(diff_t, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        cv2.drawContours(debug_img, cnts, -1, (0, 0, 255), 2)
                         
-                        # 2. SSIM Check
-                        gray_masked = gray.copy()
-                        ref_masked = state["last_stable_frame"].copy()
-                        gray_masked[combined_mask > 0] = 0
-                        ref_masked[combined_mask > 0] = 0
-                        score = ssim(gray_masked, ref_masked)
-                        state["current_ssim"] = score
-
-                        is_intruder = intruder_percent > 0.005 
-                        is_ssim_fail = score < float(config["ssim_threshold"])
-
-                        if is_intruder or is_ssim_fail:
-                            if state["failure_count"] < int(config["consecutive_failures"]):
-                                state["failure_count"] += 1
-                            if state["failure_count"] >= int(config["consecutive_failures"]):
-                                state["status"] = "failure_detected"
-                                trigger_printer_action()
-                            
-                            debug_img[combined_mask > 0] = 0
-                            cnts, _ = cv2.findContours(diff_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                            cv2.drawContours(debug_img, cnts, -1, (0, 0, 255), 2)
-                            cv2.putText(debug_img, f"POSSIBLE FAILURE", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                        else:
-                            state["failure_count"] = 0
-                            # Evolution: Update reference slowly
-                            cv2.addWeighted(state["last_stable_frame"], 0.95, gray, 0.05, 0, state["last_stable_frame"])
-                            
-                            debug_img[combined_mask > 0] = 0 
-                            cv2.putText(debug_img, f"MATCH: {int(score*100)}%", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                        cv2.putText(debug_img, f"MISMATCH: {int(score*100)}%", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
                 state["previous_gray"] = gray_motion
                 state["debug_frame"] = debug_img
