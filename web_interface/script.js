@@ -10,6 +10,7 @@ const confidenceBar = document.getElementById('confidence-bar');
 const camContainer = document.getElementById('camera-container');
 const forceStartBtn = document.getElementById('force-start-btn');
 
+// Helper: Start the image refresh loop
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
     const safeRate = (rate && rate >= 100) ? rate : 500;
@@ -23,28 +24,32 @@ function startImageLoop(rate) {
 
 startImageLoop(500);
 
-// --- HELPER: SET BUTTON STATE ---
+// Helper: Manage Button Visuals
 function setButtonState(mode) {
-    // Reset classes
+    // Clear all state classes
     forceStartBtn.classList.remove('btn-success', 'btn-danger', 'btn-primary');
     
     if (mode === 'start') {
         forceStartBtn.innerText = "▶ Start Monitoring";
         forceStartBtn.classList.add('btn-success'); // Green
+        forceStartBtn.dataset.action = "start";     // Logic flag
         forceStartBtn.style.display = 'inline-block';
     } else if (mode === 'stop') {
         forceStartBtn.innerText = "■ Stop Monitoring";
-        forceStartBtn.classList.add('btn-danger'); // Red
+        forceStartBtn.classList.add('btn-danger');  // Red
+        forceStartBtn.dataset.action = "stop";      // Logic flag
         forceStartBtn.style.display = 'inline-block';
     } else if (mode === 'force') {
         forceStartBtn.innerText = "▶ Force Start";
         forceStartBtn.classList.add('btn-primary'); // Blue
+        forceStartBtn.dataset.action = "start";
         forceStartBtn.style.display = 'inline-block';
     } else {
-        forceStartBtn.style.display = 'none'; // Hide
+        forceStartBtn.style.display = 'none'; 
     }
 }
 
+// Main Status Loop
 async function updateStatus() {
     try {
         const res = await fetch('/api/status');
@@ -53,22 +58,22 @@ async function updateStatus() {
         const statusText = data.status.toUpperCase().replace('_', ' ');
         statusBadge.innerText = statusText;
         
-        // --- BADGE COLORS & BUTTON LOGIC ---
+        // Update Badge Color & Button State
         if (data.status === 'failure_detected' || data.status === 'error') {
             statusBadge.style.backgroundColor = '#F44336'; 
-            setButtonState('stop'); // Stop button (Red)
+            setButtonState('stop');
 
         } else if (data.status === 'monitoring' || data.status === 'checking') {
             statusBadge.style.backgroundColor = '#4CAF50'; 
-            setButtonState('stop'); // Stop button (Red)
+            setButtonState('stop');
             
         } else if (data.status === 'idle') {
             statusBadge.style.backgroundColor = '#555555'; 
-            setButtonState('start'); // Start button (Green)
+            setButtonState('start');
 
         } else if (data.status === 'awaiting_macro') {
             statusBadge.style.backgroundColor = '#2196F3'; 
-            setButtonState('force'); // Force Start (Blue)
+            setButtonState('force');
             
         } else if (data.status === 'connection_error') {
             statusBadge.style.backgroundColor = '#9E9E9E'; 
@@ -77,7 +82,7 @@ async function updateStatus() {
             statusBadge.style.backgroundColor = '#f39c12'; 
         }
 
-        // Health Bar
+        // Update Bars
         const ssimPercent = Math.round(data.ssim * 100);
         ssimText.innerText = `${ssimPercent}%`;
         retryText.innerText = `${data.failures}/${data.max_retries}`;
@@ -91,19 +96,31 @@ async function updateStatus() {
 }
 setInterval(updateStatus, 1000);
 
+// --- FIXED BUTTON CLICK HANDLER ---
 forceStartBtn.addEventListener('click', async () => {
-    const currentText = forceStartBtn.innerText;
-    if(currentText.includes("Start") || currentText.includes("Force")) {
-        await fetch('/api/action/start');
-    } else {
-        await fetch('/api/action/stop');
+    const action = forceStartBtn.dataset.action; // Read the logic flag we set earlier
+    
+    // Use POST to prevent caching
+    const method = { method: 'POST' };
+    
+    try {
+        if(action === "stop") {
+            await fetch('/api/action/stop', method);
+        } else {
+            await fetch('/api/action/start', method);
+        }
+        // Force an immediate status update so UI feels snappy
+        setTimeout(updateStatus, 100); 
+    } catch (e) {
+        console.error("Failed to toggle monitoring", e);
     }
 });
 
-// ... (Settings Listeners Below - No Changes Needed) ...
+// --- SETTINGS (Unchanged) ---
 document.getElementById('open-settings-btn').addEventListener('click', async () => {
     const res = await fetch('/api/settings');
     const data = await res.json();
+    
     document.getElementById('camera_url').value = data.camera_url;
     document.getElementById('moonraker_url').value = data.moonraker_url || "http://127.0.0.1:7125";
     document.getElementById('check_interval').value = data.check_interval;
@@ -113,7 +130,9 @@ document.getElementById('open-settings-btn').addEventListener('click', async () 
     document.getElementById('on_failure').value = data.on_failure || "nothing";
     document.getElementById('aspect_ratio').value = data.aspect_ratio || "16:9";
     document.getElementById('preview_refresh_rate').value = data.preview_refresh_rate || 500;
+    
     if(data.aspect_ratio) camContainer.style.aspectRatio = data.aspect_ratio.replace(':', '/');
+
     settingsModal.showModal();
 });
 
@@ -132,17 +151,21 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         aspect_ratio: document.getElementById('aspect_ratio').value,
         preview_refresh_rate: newRate
     };
+    
     await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
+    
     camContainer.style.aspectRatio = payload.aspect_ratio.replace(':', '/');
     startImageLoop(newRate); 
+    
     alert("Configuration Saved!");
     settingsModal.close();
 });
 
+// Init
 fetch('/api/settings').then(r => r.json()).then(data => {
     if(data.aspect_ratio) camContainer.style.aspectRatio = data.aspect_ratio.replace(':', '/');
     if(data.preview_refresh_rate) startImageLoop(data.preview_refresh_rate);
