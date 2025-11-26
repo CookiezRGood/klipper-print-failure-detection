@@ -19,16 +19,14 @@ except ImportError:
 log = logging.getLogger('werkzeug')
 log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: TFLITE WITH LABELS <<<")
+logging.info(">>> STARTING PLUGIN: RGB FIX + SMART LABELS <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.tflite')
 
-# --- DEFINE YOUR CLASS NAMES HERE ---
-# Order must match your Roboflow dataset exactly!
-# Class 0, Class 1, Class 2...
+# --- CLASS NAMES (Customize these to match your model) ---
 CLASS_NAMES = ["Spaghetti", "Stringing", "Zits"]
 
 default_config = {
@@ -98,7 +96,7 @@ def load_model():
 ai_ready = load_model()
 
 def post_process_yolo(output_data, img_width, img_height, conf_threshold):
-    # Transpose [1, 4+Nc, 8400] -> [8400, 4+Nc]
+    # YOLOv8 Output is [1, 4+Nc, 8400]. Transpose to [8400, 4+Nc]
     output = np.transpose(output_data[0])
     
     boxes = []
@@ -108,6 +106,7 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
     x_factor = img_width / input_width
     y_factor = img_height / input_height
 
+    # Slice scores (skip first 4 coords)
     scores = output[:, 4:]
     max_scores = np.max(scores, axis=1)
     max_indices = np.argmax(scores, axis=1)
@@ -125,6 +124,10 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
         top = int((cy - h/2) * y_factor)
         width = int(w * x_factor)
         height = int(h * y_factor)
+        
+        # Clamp to image boundaries
+        left = max(0, left)
+        top = max(0, top)
         
         boxes.append([left, top, width, height])
         confidences.append(float(score))
@@ -148,12 +151,20 @@ def run_inference(image):
     
     try:
         original_h, original_w = image.shape[:2]
+        
+        # 1. Resize
         resized = cv2.resize(image, (input_width, input_height))
-        input_data = np.expand_dims(resized, axis=0)
+        
+        # 2. Convert BGR to RGB (Fixes color accuracy)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        
+        # 3. Normalize
+        input_data = np.expand_dims(rgb, axis=0)
         
         if input_details[0]['dtype'] == np.float32:
             input_data = (input_data.astype(np.float32) / 255.0)
         
+        # 4. Run
         interpreter.set_tensor(input_details[0]['index'], input_data)
         interpreter.invoke()
         
@@ -253,21 +264,27 @@ def background_monitor():
                     x, y, w, h = d['box']
                     cls_id = d['class']
                     
-                    # Lookup Name safely
                     label = "Failure"
                     if cls_id < len(CLASS_NAMES):
                         label = CLASS_NAMES[cls_id]
-                    
                     detected_names.append(label)
                     
-                    # Draw Box
+                    # Box Color: Red
                     cv2.rectangle(debug_img, (x, y), (x+w, y+h), (0, 0, 255), 2)
                     
-                    # Draw Label Background
+                    # Smart Label Positioning
                     text = f"{label} {int(d['conf']*100)}%"
                     (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                    cv2.rectangle(debug_img, (x, y-15), (x+tw, y), (0, 0, 255), -1)
-                    cv2.putText(debug_img, text, (x, y-3), 
+                    
+                    # If box is at the very top, draw text INSIDE the box
+                    if y < 20:
+                        text_y = y + th + 5
+                    else:
+                        text_y = y - 5 # Standard (above box)
+
+                    # Text Background
+                    cv2.rectangle(debug_img, (x, text_y - th - 2), (x + tw, text_y + 2), (0, 0, 255), -1)
+                    cv2.putText(debug_img, text, (x, text_y), 
                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 
                 state["annotated_frame"] = debug_img
@@ -278,9 +295,9 @@ def background_monitor():
                     if state["failure_count"] < max_retries:
                         state["failure_count"] += 1
                     
-                    # Grab the primary failure name for logs
                     primary_cause = detected_names[0] if detected_names else "Failure"
                     
+                    # Log the coordinates for debugging
                     logging.info(f"ALERT: Found {primary_cause} ({score:.2f}) | Count: {state['failure_count']}/{max_retries}")
                     
                     if state["failure_count"] >= max_retries:
