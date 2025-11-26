@@ -11,10 +11,9 @@ SERVICE_NAME="klipper-print-failure-detection"
 echo "Detected User: $KLIPPER_USER"
 echo "Installation Directory: $PLUGIN_DIR"
 
-# 1. System Dependencies
-# libgl1 is required for the image processing backend of YOLO
+# 1. System Dependencies (libatlas for numpy/tflite)
 echo "Installing system libraries..."
-apt-get update && apt-get install -y python3-opencv python3-venv libopenjp2-7 libgl1
+apt-get update && apt-get install -y python3-opencv python3-venv libopenjp2-7 libatlas-base-dev
 
 # 2. Virtual Environment
 if [ ! -d "$PLUGIN_DIR/venv" ]; then
@@ -22,16 +21,13 @@ if [ ! -d "$PLUGIN_DIR/venv" ]; then
     sudo -u "$KLIPPER_USER" python3 -m venv "$PLUGIN_DIR/venv"
 fi
 
-# 3. Install YOLOv8 (Ultralytics)
+# 3. Install Lightweight Requirements
 echo "------------------------------------------------"
-echo "INSTALLING AI ENGINE (YOLOv8)"
-echo "This will download PyTorch (~200MB). It may take 5-10 mins."
+echo "INSTALLING TFLITE RUNTIME (Lightweight AI)"
 echo "------------------------------------------------"
+sudo -u "$KLIPPER_USER" "$PLUGIN_DIR/venv/bin/pip" install -r "$PLUGIN_DIR/requirements.txt"
 
-# We use --no-cache-dir to save SD card write cycles
-sudo -u "$KLIPPER_USER" "$PLUGIN_DIR/venv/bin/pip" install --no-cache-dir -r "$PLUGIN_DIR/requirements.txt"
-
-# 4. Permissions Fix
+# 4. Permissions
 echo "Fixing permissions..."
 chown -R "$KLIPPER_USER":"$KLIPPER_USER" "$PLUGIN_DIR"
 
@@ -41,7 +37,7 @@ echo "Creating Systemd service..."
 
 cat > $SERVICE_FILE <<EOF
 [Unit]
-Description=Klipper Print Failure Detection (YOLOv8)
+Description=Klipper Print Failure Detection (TFLite)
 After=network.target
 
 [Service]
@@ -64,6 +60,5 @@ systemctl restart "$SERVICE_NAME".service
 
 echo "------------------------------------------------"
 echo "Installation Complete!"
-echo "IMPORTANT: You must place 'model.pt' in:"
-echo "$PLUGIN_DIR/"
+echo "Please upload your exported 'model.tflite' file."
 echo "------------------------------------------------"
