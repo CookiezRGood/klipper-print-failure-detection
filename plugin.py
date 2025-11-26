@@ -8,20 +8,16 @@ import json
 import os
 from flask import Flask, jsonify, request, Response, send_from_directory
 
-# --- LOGGING SETUP (SILENCE THE SPAM) ---
-# This disables the "GET /api/latest_frame 200" messages
+# --- LOGGING SETUP ---
 log = logging.getLogger('werkzeug')
 log.disabled = True
-
-# Configure our main logger to show only Plugin info
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: SILENT PRODUCTION MODE <<<")
+logging.info(">>> STARTING PLUGIN: DEEP DEBUG MODE <<<")
 
-# Import YOLO Engine
 try:
     from ultralytics import YOLO
 except ImportError:
-    logging.warning("CRITICAL: Ultralytics not found. AI will not work.")
+    logging.warning("CRITICAL: Ultralytics not found.")
     YOLO = None
 
 app = Flask(__name__, static_folder='web_interface')
@@ -34,7 +30,7 @@ default_config = {
     "moonraker_url": "http://127.0.0.1:7125",
     "check_interval": 2000,
     "ai_threshold": 0.50,
-    "consecutive_failures": 3,
+    "consecutive_failures": 1,
     "on_failure": "pause",
     "aspect_ratio": "16:9",
     "preview_refresh_rate": 500
@@ -63,17 +59,14 @@ state = {
     "monitoring_active": False 
 }
 
-# --- AI ENGINE ---
 model = None
-
 def load_model():
     global model
     if not os.path.exists(MODEL_PATH):
         logging.error(f"CRITICAL: model.pt NOT FOUND at {MODEL_PATH}")
         return False
-    
     try:
-        logging.info("Loading YOLOv8 Model... (This may take 30s)")
+        logging.info("Loading YOLOv8 Model...")
         model = YOLO(MODEL_PATH, task='detect')
         logging.info("YOLOv8 Model Loaded Successfully.")
         return True
@@ -83,7 +76,6 @@ def load_model():
 
 ai_ready = load_model()
 
-# --- ROUTES ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
@@ -130,7 +122,6 @@ def background_monitor():
 
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
-            # Fetch Image
             resp = requests.get(config['camera_url'], timeout=2)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
@@ -150,44 +141,51 @@ def background_monitor():
                 time.sleep(1)
                 continue
 
-            # --- AI INFERENCE ---
+            # --- AI INFERENCE (DEBUG MODE) ---
             state["status"] = "monitoring"
             
             if model:
-                user_conf = float(config.get("ai_threshold", 0.5))
-                
-                # Run Inference
-                results = model(state["latest_frame"], conf=user_conf, verbose=False)
+                # Force confidence to 1% (0.01) so we see EVERYTHING
+                # This bypasses the user setting for logging purposes
+                results = model(state["latest_frame"], conf=0.01, verbose=False)
                 result = results[0]
                 
+                # Draw ALL boxes (even weak ones)
                 state["annotated_frame"] = result.plot()
                 
-                box_count = len(result.boxes)
-                max_retries = int(config["consecutive_failures"])
+                # --- DIAGNOSTIC LOGGING ---
+                # This prints every single detection to the logs
+                if len(result.boxes) > 0:
+                    for box in result.boxes:
+                        logging.info(f"DEBUG SCAN: Found Object with Confidence: {float(box.conf):.4f}")
+                else:
+                    logging.info("DEBUG SCAN: No objects found (even at 1% confidence)")
+                # --------------------------
+
+                # --- ACTUAL LOGIC ---
+                # Now we apply the REAL user threshold for the failure trigger
+                user_threshold = float(config.get("ai_threshold", 0.5))
                 
-                if box_count > 0:
-                    # FAILURE DETECTED
-                    top_conf = float(result.boxes.conf[0])
+                # Filter boxes that pass the REAL threshold
+                valid_failures = [box for box in result.boxes if float(box.conf) >= user_threshold]
+                
+                if len(valid_failures) > 0:
+                    # Use the highest confidence score for the UI
+                    top_conf = float(max(valid_failures, key=lambda x: x.conf).conf)
                     state["failure_score"] = top_conf
                     
-                    # Increment count (Capped at max_retries)
-                    if state["failure_count"] < max_retries:
+                    if state["failure_count"] < int(config["consecutive_failures"]):
                         state["failure_count"] += 1
                     
-                    logging.info(f"ALERT: Found {box_count} objects. Conf: {top_conf:.2f} | Count: {state['failure_count']}/{max_retries}")
+                    logging.info(f"ALERT: Failure Confirmed ({top_conf:.2f}) | Count: {state['failure_count']}")
                     
-                    if state["failure_count"] >= max_retries:
+                    if state["failure_count"] >= int(config["consecutive_failures"]):
                         state["status"] = "failure_detected"
                         trigger_printer_action()
                 else:
-                    # NO FAILURE
                     state["failure_score"] = 0.0
-                    
-                    # Smart Decay: If we had failures, reduce count slowly instead of instant reset
-                    # This handles flickering detections
                     if state["failure_count"] > 0:
                         state["failure_count"] -= 1
-                        logging.info(f"Threat clearing... Count decayed to {state['failure_count']}/{max_retries}")
 
         except Exception as e:
             logging.error(f"Loop Error: {e}")
@@ -197,7 +195,7 @@ def background_monitor():
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
-# Routes
+# Routes (Unchanged)
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 @app.route('/<path:path>')
