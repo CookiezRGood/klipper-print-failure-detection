@@ -9,15 +9,18 @@ import os
 from flask import Flask, jsonify, request, Response, send_from_directory
 
 # --- LOGGING SETUP ---
+# Silence web server logs
 log = logging.getLogger('werkzeug')
 log.disabled = True
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: DEEP DEBUG MODE <<<")
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.info(">>> STARTING PLUGIN: PRODUCTION MODE <<<")
+
+# Import YOLO Engine
 try:
     from ultralytics import YOLO
 except ImportError:
-    logging.warning("CRITICAL: Ultralytics not found.")
+    logging.warning("CRITICAL: Ultralytics not found. AI will not work.")
     YOLO = None
 
 app = Flask(__name__, static_folder='web_interface')
@@ -30,7 +33,7 @@ default_config = {
     "moonraker_url": "http://127.0.0.1:7125",
     "check_interval": 2000,
     "ai_threshold": 0.50,
-    "consecutive_failures": 1,
+    "consecutive_failures": 3,
     "on_failure": "pause",
     "aspect_ratio": "16:9",
     "preview_refresh_rate": 500
@@ -59,12 +62,15 @@ state = {
     "monitoring_active": False 
 }
 
+# --- AI ENGINE ---
 model = None
+
 def load_model():
     global model
     if not os.path.exists(MODEL_PATH):
         logging.error(f"CRITICAL: model.pt NOT FOUND at {MODEL_PATH}")
         return False
+    
     try:
         logging.info("Loading YOLOv8 Model...")
         model = YOLO(MODEL_PATH, task='detect')
@@ -76,6 +82,7 @@ def load_model():
 
 ai_ready = load_model()
 
+# --- ROUTES ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
@@ -122,6 +129,7 @@ def background_monitor():
 
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
+            # Fetch Image
             resp = requests.get(config['camera_url'], timeout=2)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
@@ -141,49 +149,41 @@ def background_monitor():
                 time.sleep(1)
                 continue
 
-            # --- AI INFERENCE (DEBUG MODE) ---
+            # --- AI INFERENCE ---
             state["status"] = "monitoring"
             
             if model:
-                # Force confidence to 1% (0.01) so we see EVERYTHING
-                # This bypasses the user setting for logging purposes
-                results = model(state["latest_frame"], conf=0.01, verbose=False)
+                # Use the REAL User Threshold (e.g., 0.50)
+                # This filters out all the 0.01 garbage detections
+                user_conf = float(config.get("ai_threshold", 0.5))
+                
+                results = model(state["latest_frame"], conf=user_conf, verbose=False)
                 result = results[0]
                 
-                # Draw ALL boxes (even weak ones)
+                # Only draw boxes that passed the threshold
                 state["annotated_frame"] = result.plot()
                 
-                # --- DIAGNOSTIC LOGGING ---
-                # This prints every single detection to the logs
-                if len(result.boxes) > 0:
-                    for box in result.boxes:
-                        logging.info(f"DEBUG SCAN: Found Object with Confidence: {float(box.conf):.4f}")
-                else:
-                    logging.info("DEBUG SCAN: No objects found (even at 1% confidence)")
-                # --------------------------
-
-                # --- ACTUAL LOGIC ---
-                # Now we apply the REAL user threshold for the failure trigger
-                user_threshold = float(config.get("ai_threshold", 0.5))
+                box_count = len(result.boxes)
+                max_retries = int(config["consecutive_failures"])
                 
-                # Filter boxes that pass the REAL threshold
-                valid_failures = [box for box in result.boxes if float(box.conf) >= user_threshold]
-                
-                if len(valid_failures) > 0:
-                    # Use the highest confidence score for the UI
-                    top_conf = float(max(valid_failures, key=lambda x: x.conf).conf)
+                if box_count > 0:
+                    # FAILURE DETECTED
+                    top_conf = float(result.boxes.conf[0])
                     state["failure_score"] = top_conf
                     
-                    if state["failure_count"] < int(config["consecutive_failures"]):
+                    if state["failure_count"] < max_retries:
                         state["failure_count"] += 1
                     
-                    logging.info(f"ALERT: Failure Confirmed ({top_conf:.2f}) | Count: {state['failure_count']}")
+                    logging.info(f"ALERT: Found {box_count} failures. Conf: {top_conf:.2f} | Count: {state['failure_count']}/{max_retries}")
                     
-                    if state["failure_count"] >= int(config["consecutive_failures"]):
+                    if state["failure_count"] >= max_retries:
                         state["status"] = "failure_detected"
                         trigger_printer_action()
                 else:
+                    # NO FAILURE
                     state["failure_score"] = 0.0
+                    
+                    # Smart Decay
                     if state["failure_count"] > 0:
                         state["failure_count"] -= 1
 
@@ -195,7 +195,7 @@ def background_monitor():
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
-# Routes (Unchanged)
+# Routes
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 @app.route('/<path:path>')
