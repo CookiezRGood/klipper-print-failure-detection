@@ -175,7 +175,7 @@ async function loadSettings() {
 
 document.getElementById('open-settings-btn').addEventListener('click', () => {
     loadSettings();
-    settingsModal.showModal();
+    settingsModal.showModal();  // This should only open the settings modal, not trigger monitoring
 });
 
 document.getElementById('close-modal-x').addEventListener('click', () => settingsModal.close());
@@ -204,13 +204,15 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         if (response.ok) {
             alert("Configuration Saved!");
             settingsModal.close();
-            // Start the image loop with the new refresh rate
+            // After saving the settings, restart the image loop with the new refresh rate
             startImageLoop();
         } else {
             console.error("Failed to save settings.");
+            alert("Failed to save settings. Please try again.");
         }
     } catch (e) {
         console.error("Error saving settings:", e);
+        alert("Error saving settings. Please try again.");
     }
 
     const ratio = currentSettings.aspect_ratio.replace(':', '/');
