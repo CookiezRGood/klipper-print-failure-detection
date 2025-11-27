@@ -12,7 +12,7 @@ from flask import Flask, jsonify, request, Response, send_from_directory
 log = logging.getLogger('werkzeug')
 log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: DYNAMIC CAMERA LAYOUT <<<")
+logging.info(">>> STARTING PLUGIN: MATH & LAYOUT FIX <<<")
 
 # Import TFLite Runtime
 try:
@@ -33,15 +33,13 @@ default_config = {
         {"id": 0, "name": "Primary", "url": "http://127.0.0.1/webcam/?action=snapshot", "enabled": True},
         {"id": 1, "name": "Secondary", "url": "", "enabled": False}
     ],
-    "camera_count": 2,          # <--- NEW SETTING
     "moonraker_url": "http://127.0.0.1:7125",
     "check_interval": 500,
-    "ai_threshold": 0.50,
     "warn_threshold": 0.30,
+    "ai_threshold": 0.50,
     "consecutive_failures": 2,
     "on_failure": "pause",
-    "aspect_ratio": "16:9",
-    "preview_refresh_rate": 500
+    "aspect_ratio": "16:9"
 }
 
 config = default_config.copy()
@@ -77,9 +75,10 @@ input_details = None
 output_details = None
 input_height = 640
 input_width = 640
+input_dtype = np.float32
 
 def load_model():
-    global interpreter, input_details, output_details, input_height, input_width
+    global interpreter, input_details, output_details, input_height, input_width, input_dtype
     if not os.path.exists(MODEL_PATH):
         logging.error(f"CRITICAL: model.tflite NOT FOUND at {MODEL_PATH}")
         return False
@@ -94,6 +93,7 @@ def load_model():
         input_shape = input_details[0]['shape']
         input_height = input_shape[1]
         input_width = input_shape[2]
+        input_dtype = input_details[0]['dtype']
         
         logging.info(f"TFLite Model Loaded. Shape: {input_shape}")
         return True
@@ -113,8 +113,16 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
     confidences = []
     class_ids = []
     
-    x_factor = img_width / input_width
-    y_factor = img_height / input_height
+    # Auto-detect scale
+    sample_coords = output[:, :4].flatten()
+    is_normalized = np.max(sample_coords) <= 1.5 
+    
+    if is_normalized:
+        x_factor = img_width
+        y_factor = img_height
+    else:
+        x_factor = img_width / input_width
+        y_factor = img_height / input_height
 
     scores = output[:, 4:]
     max_scores = np.max(scores, axis=1)
@@ -127,10 +135,12 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
         class_id = int(max_indices[i])
         row = output[i]
         
+        # Coordinates: cx, cy, w, h
         cx, cy, w, h = row[0], row[1], row[2], row[3]
         
-        left = int((cx - w/2) * x_factor)
-        top = int((cy - h/2) * y_factor)
+        # Convert to Top-Left (Standard OpenCV format)
+        left = int((cx - (w / 2)) * x_factor)
+        top = int((cy - (h / 2)) * y_factor)
         width = int(w * x_factor)
         height = int(h * y_factor)
         
@@ -162,7 +172,9 @@ def run_inference(image):
         
         if input_details[0]['dtype'] == np.float32:
             input_data = (input_data.astype(np.float32) / 255.0)
-        
+        elif input_details[0]['dtype'] == np.uint8:
+            input_data = input_data.astype(np.uint8)
+            
         interpreter.set_tensor(input_details[0]['index'], input_data)
         interpreter.invoke()
         
@@ -228,17 +240,8 @@ def background_monitor():
 
             max_frame_score = 0.0
             
-            # Limit loop based on Camera Count setting
-            cam_limit = int(config.get("camera_count", 2))
-            
             for cam in config["cameras"]:
                 cam_id = cam["id"]
-                
-                # Skip camera if ID exceeds limit (e.g. ID 1 when limit is 1)
-                if cam_id >= cam_limit:
-                    state["cameras"][cam_id]["score"] = 0.0
-                    continue
-
                 if not cam["enabled"] or not cam["url"]: 
                     state["cameras"][cam_id]["score"] = 0.0
                     continue
@@ -258,6 +261,7 @@ def background_monitor():
                             score, detections = run_inference(img)
                             debug_img = img.copy()
                             trigger_thresh = float(config.get("ai_threshold", 0.5))
+                            h_img, w_img = debug_img.shape[:2]
 
                             for d in detections:
                                 x, y, w, h = d['box']
@@ -272,17 +276,21 @@ def background_monitor():
                                     box_color = (0, 255, 255) 
                                     text_color = (0, 0, 0)
 
-                                h_img, w_img = debug_img.shape[:2]
-                                x = max(0, min(x, w_img))
-                                y = max(0, min(y, h_img))
-                                w = max(0, min(w, w_img - x))
-                                h = max(0, min(h, h_img - y))
+                                # --- MATH FIX: Prevent Negative Coords ---
+                                x = max(0, x); y = max(0, y)
+                                w = min(w, w_img - x); h = min(h, h_img - y)
 
+                                # Draw Box
                                 cv2.rectangle(debug_img, (x, y), (x+w, y+h), box_color, 2)
                                 
+                                # Draw Label
                                 text = f"{label} {int(conf*100)}%"
                                 (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                                text_y = y + th + 5 if y < 20 else y - 5
+                                
+                                # Smart Position: Draw inside if top-left, otherwise above
+                                if y < 25: text_y = y + 20
+                                else: text_y = y - 5
+                                
                                 cv2.rectangle(debug_img, (x, text_y - th - 2), (x + tw, text_y + 2), box_color, -1)
                                 cv2.putText(debug_img, text, (x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 1)
                             
@@ -323,6 +331,7 @@ def background_monitor():
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
+# Routes
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 @app.route('/<path:path>')
