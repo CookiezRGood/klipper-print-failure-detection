@@ -12,7 +12,7 @@ from flask import Flask, jsonify, request, Response, send_from_directory
 log = logging.getLogger('werkzeug')
 log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: MULTI-CAM + MANUAL DRAWING <<<")
+logging.info(">>> STARTING PLUGIN: MULTI-CAM YOLO <<<")
 
 # Import YOLO Engine
 try:
@@ -26,7 +26,6 @@ app = Flask(__name__, static_folder='web_interface')
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.pt')
 
-# --- CLASS NAMES ---
 CLASS_NAMES = ["Spaghetti", "Stringing", "Zits"]
 
 default_config = {
@@ -37,7 +36,7 @@ default_config = {
     "moonraker_url": "http://127.0.0.1:7125",
     "check_interval": 2000,
     "ai_threshold": 0.50,
-    "consecutive_failures": 1,
+    "consecutive_failures": 2,
     "on_failure": "pause",
     "aspect_ratio": "16:9",
     "preview_refresh_rate": 500
@@ -48,7 +47,7 @@ if os.path.exists(SETTINGS_FILE):
     try:
         with open(SETTINGS_FILE, 'r') as f:
             loaded = json.load(f)
-            # Migration for old config style
+            # Migration for old single-cam config
             if "camera_url" in loaded:
                 config["cameras"][0]["url"] = loaded["camera_url"]
             config.update(loaded)
@@ -60,7 +59,6 @@ def save_config_to_file():
             json.dump(config, f, indent=4)
     except Exception: pass
 
-# --- GLOBAL STATE ---
 state = {
     "status": "idle",
     "failure_count": 0,
@@ -138,48 +136,39 @@ def background_monitor():
                 state["monitoring_active"] = False
 
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
-            
-            # --- MULTI-CAMERA LOOP ---
+
             max_frame_score = 0.0
-            active_cam_count = 0
             
+            # Loop through all cameras
             for cam in config["cameras"]:
                 cam_id = cam["id"]
                 
-                # If disabled or empty URL, skip
                 if not cam["enabled"] or not cam["url"]:
-                    # Keep state clean/empty
                     state["cameras"][cam_id]["score"] = 0.0
-                    # We don't clear the frame here so the "Disabled" overlay can work in UI
                     continue
-                
-                active_cam_count += 1
 
-                # 1. Fetch Image
                 try:
                     resp = requests.get(cam["url"], timeout=2)
                     if resp.status_code == 200:
                         arr = np.frombuffer(resp.content, np.uint8)
                         img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                         
-                        # If Idle/Off, just save raw frame
                         if not should_run:
                             state["cameras"][cam_id]["frame"] = img
                             state["cameras"][cam_id]["score"] = 0.0
                             continue
                         
-                        # 2. Run AI Inference
+                        # AI INFERENCE
+                        cam_high_score = 0.0
                         if model:
                             user_conf = float(config.get("ai_threshold", 0.5))
                             results = model(img, conf=user_conf, verbose=False)
                             result = results[0]
                             
-                            # --- MANUAL DRAWING ---
+                            # Manual Box Drawing
                             debug_img = img.copy()
-                            box_count = len(result.boxes)
-                            cam_high_score = 0.0
                             
-                            if box_count > 0:
+                            if len(result.boxes) > 0:
                                 for box in result.boxes:
                                     coords = box.xyxy[0].cpu().numpy().astype(int)
                                     conf = float(box.conf[0])
@@ -191,42 +180,27 @@ def background_monitor():
                                     if cls_id < len(CLASS_NAMES): label = CLASS_NAMES[cls_id]
                                     
                                     x1, y1, x2, y2 = coords
-                                    
-                                    # Clamp
                                     h_img, w_img = debug_img.shape[:2]
                                     x1 = max(0, min(x1, w_img)); x2 = max(0, min(x2, w_img))
                                     y1 = max(0, min(y1, h_img)); y2 = max(0, min(y2, h_img))
                                     
-                                    # Draw Red Box
                                     cv2.rectangle(debug_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                                    
-                                    # Smart Label
                                     text = f"{label} {int(conf*100)}%"
                                     (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
                                     
-                                    if y1 < 20: text_y = y1 + th + 5
-                                    else: text_y = y1 - 5
-                                    
+                                    text_y = y1 + th + 5 if y1 < 20 else y1 - 5
                                     cv2.rectangle(debug_img, (x1, text_y - th - 2), (x1 + tw, text_y + 2), (0, 0, 255), -1)
-                                    cv2.putText(debug_img, text, (x1, text_y), 
-                                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-
-                                # Update this camera's score
-                                state["cameras"][cam_id]["score"] = cam_high_score
-                                # Update global max
-                                if cam_high_score > max_frame_score:
-                                    max_frame_score = cam_high_score
-                                    
-                            else:
-                                state["cameras"][cam_id]["score"] = 0.0
+                                    cv2.putText(debug_img, text, (x1, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                             
-                            # Save drawn frame
                             state["cameras"][cam_id]["frame"] = debug_img
-                except Exception:
-                    # Connection error to this specific camera
-                    pass
+                            state["cameras"][cam_id]["score"] = cam_high_score
+                            
+                            if cam_high_score > max_frame_score:
+                                max_frame_score = cam_high_score
 
-            # --- GLOBAL STATE UPDATE ---
+                except Exception: pass
+
+            # Update Global Status
             if not should_run:
                 state["status"] = "idle"
                 state["failure_count"] = 0
@@ -235,24 +209,21 @@ def background_monitor():
                 continue
 
             state["status"] = "monitoring"
-            
-            # Global Failure Logic
-            threshold = float(config.get("ai_threshold", 0.5))
             max_retries = int(config["consecutive_failures"])
+            threshold = float(config.get("ai_threshold", 0.5))
             
             if max_frame_score > threshold:
                 if state["failure_count"] < max_retries:
                     state["failure_count"] += 1
                 
-                logging.info(f"ALERT: Failure detected! Score: {max_frame_score:.2f} | Count: {state['failure_count']}")
+                logging.info(f"ALERT: Failure Score {max_frame_score:.2f} | Count: {state['failure_count']}")
                 
                 if state["failure_count"] >= max_retries:
                     state["status"] = "failure_detected"
                     trigger_printer_action(reason="AI Detection")
             else:
-                # Decay
                 if state["failure_count"] > 0:
-                     state["failure_count"] -= 1
+                    state["failure_count"] -= 1
 
         except Exception as e:
             logging.error(f"Loop Error: {e}")
@@ -262,12 +233,11 @@ def background_monitor():
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
-# --- API ROUTES ---
+# Routes
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 @app.route('/<path:path>')
 def serve_static(path): return send_from_directory('web_interface', path)
-
 @app.route('/api/settings', methods=['GET', 'POST'])
 def settings():
     if request.method == 'POST':
@@ -275,28 +245,24 @@ def settings():
         save_config_to_file()
         return jsonify({"status": "saved", "config": config})
     return jsonify(config)
-
 @app.route('/api/status', methods=['GET'])
 def get_status():
-    # Return max score across all cameras for the main bar
-    max_score = max(state["cameras"][0]["score"], state["cameras"][1]["score"])
+    # Get max score from any camera
+    s1 = state["cameras"][0]["score"]
+    s2 = state["cameras"][1]["score"]
     return jsonify({
         "status": state["status"],
-        "score": max_score,
+        "score": max(s1, s2),
         "failures": state["failure_count"],
         "max_retries": config["consecutive_failures"]
     })
-
 @app.route('/api/frame/<int:cam_id>')
 def get_frame(cam_id):
-    # If cam_id doesn't exist or has no frame, return black image
     if cam_id not in state["cameras"] or state["cameras"][cam_id]["frame"] is None:
         blank = np.zeros((360, 640, 3), np.uint8)
-        # Optional: Draw "NO SIGNAL" text on black frame
         cv2.putText(blank, "NO SIGNAL / DISABLED", (50, 180), cv2.FONT_HERSHEY_SIMPLEX, 1, (100,100,100), 2)
         _, buffer = cv2.imencode('.jpg', blank)
         return Response(buffer.tobytes(), mimetype='image/jpeg')
-        
     _, buffer = cv2.imencode('.jpg', state["cameras"][cam_id]["frame"])
     return Response(buffer.tobytes(), mimetype='image/jpeg')
 
