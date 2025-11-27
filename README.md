@@ -9,13 +9,26 @@ It runs locally on your Raspberry Pi (or other Klipper host), integrates directl
 ## Features
 
 - **AI Failure Detection**: Uses a .tflite model (YOLOv8 Nano architecture) to identify failures with high accuracy.
+- **Real-time Dashboard**: View live feeds with bounding box overlays showing exactly what the AI detected.
+
+<img width="1271" height="795" alt="image" src="https://github.com/user-attachments/assets/98d8650e-d1eb-494f-8e06-f3e69f2f7ccf" />
+
+- **Comprehensive Settings Menu**: Many configurable aspcets to the plugin to make it work the way you want/need.
 - **Multi-Camera Support**: Monitor and detect failures on up to 2 cameras at once.
+
+<img width="432" height="428" alt="image" src="https://github.com/user-attachments/assets/47c7af32-ce09-4da5-8266-52215345a113" />
+
 - **Dual Thresholds**:
    - **Detection Threshold**: Visually highlights potential issues (Yellow box) without stopping the print.
    - **Trigger Threshold**: Automatically pauses or cancels the print when confidence is high (Red box) after a set number of retrys.
-- **Smart Idle Mode**: Automatically stops processing when the printer is idle to save CPU resources.
-- **Real-time Dashboard**: View live feeds with bounding box overlays showing exactly what the AI detected.
+ 
+<img width="433" height="389" alt="image" src="https://github.com/user-attachments/assets/c3bfc437-82ba-4c7c-8fb3-29a8c085e711" />
+
 - **Configurable Actions**: Choose to Warn, Pause, or Cancel print upon failure.
+
+<img width="423" height="224" alt="image" src="https://github.com/user-attachments/assets/3fbc8ce3-c76a-4ae0-92e5-fe995f573ea7" />
+
+- **Smart Idle Mode**: Automatically stops processing when the printer is idle to save CPU resources.
 
 ## Installation
 
