@@ -58,6 +58,8 @@ async function toggleCamera(id, isEnabled) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(currentSettings)
             });
+            // Trigger an immediate update of the failure probability meter
+            updateStatus();
         } catch (e) {}
     }
 }
