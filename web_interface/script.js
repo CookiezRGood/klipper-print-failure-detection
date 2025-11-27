@@ -20,10 +20,10 @@ const cam1View = document.getElementById('cam1-container');
 const cam2View = document.getElementById('cam2-container');
 
 // --- IMAGE REFRESH LOOP ---
-function startImageLoop(rate) {
+function startImageLoop() {
     if (imageInterval) clearInterval(imageInterval);
-    const safeRate = (rate && rate >= 100) ? rate : 500;
     
+    // We will now refresh the camera every time the detection process occurs
     imageInterval = setInterval(() => {
         const timestamp = new Date().getTime();
         
@@ -34,7 +34,7 @@ function startImageLoop(rate) {
         if (!cam2Card.classList.contains('disabled')) {
             cam2Img.src = `/api/frame/1?t=${timestamp}`;
         }
-    }, safeRate);
+    }, float(config["check_interval"]) / 1000.0); // Use the same interval
 }
 
 // --- TOGGLE HANDLERS ---
