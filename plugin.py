@@ -325,6 +325,7 @@ def settings():
         save_config_to_file()
         return jsonify({"status": "saved", "config": config})
     return jsonify(config)
+
 @app.route('/api/status', methods=['GET'])
 def get_status():
     # Returns the HIGHEST single score, not the sum
