@@ -140,7 +140,7 @@ function applyLayout(count) {
         cameraGrid.classList.remove('single-mode');
         cam2Card.classList.remove('hidden');
         cam1Card.querySelector('.cam-controls').style.display = 'flex';
-        document.getElementById('cam2-settings-row').style.display = 'flex';
+        document.getElementById('cam2-settings-row').style.display = '';
     }
 }
 
