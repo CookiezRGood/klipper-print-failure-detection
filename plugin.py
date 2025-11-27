@@ -8,23 +8,25 @@ import json
 import os
 from flask import Flask, jsonify, request, Response, send_from_directory
 
-# --- LOGGING ---
-log = logging.getLogger('werkzeug')
-log.disabled = True
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: COORDINATE DIAGNOSTIC MODE <<<")
-
+# Import TFLite Runtime
 try:
     import tflite_runtime.interpreter as tflite
 except ImportError:
     logging.warning("CRITICAL: tflite-runtime not found.")
     tflite = None
 
+# --- LOGGING ---
+log = logging.getLogger('werkzeug')
+log.disabled = True
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.info(">>> STARTING PLUGIN: TFLITE COORDINATE FIX <<<")
+
 app = Flask(__name__, static_folder='web_interface')
 
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.tflite')
 
+# --- CLASS NAMES (Customize these to match your model) ---
 CLASS_NAMES = ["Spaghetti", "Stringing", "Zits"]
 
 default_config = {
@@ -77,16 +79,15 @@ def load_model():
     try:
         interpreter = tflite.Interpreter(model_path=MODEL_PATH)
         interpreter.allocate_tensors()
+        
         input_details = interpreter.get_input_details()
         output_details = interpreter.get_output_details()
+        
         input_shape = input_details[0]['shape']
         input_height = input_shape[1]
         input_width = input_shape[2]
         
-        # LOGGING MODEL INFO
-        logging.info(f"DIAGNOSTIC: Model Input Shape: {input_shape}")
-        logging.info(f"DIAGNOSTIC: Output Details: {output_details[0]['shape']}")
-        
+        logging.info(f"TFLite Model Loaded. Input Shape: {input_shape}")
         return True
     except Exception as e:
         logging.error(f"Failed to load TFLite: {e}")
@@ -95,42 +96,25 @@ def load_model():
 ai_ready = load_model()
 
 def post_process_yolo(output_data, img_width, img_height, conf_threshold):
-    # Detect if we need transpose
-    # YOLO output is usually [1, 4+Nc, 8400]
-    if output_data.shape[1] < output_data.shape[2]:
-        output = np.transpose(output_data[0])
-    else:
-        output = output_data[0]
-
+    # Transpose [1, 4+Nc, 8400] -> [8400, 4+Nc]
+    # This creates rows of [cx, cy, w, h, score1, score2, score3]
+    output = np.transpose(output_data[0])
+    
     boxes = []
     confidences = []
     class_ids = []
-
-    # DIAGNOSTIC: Check the raw values of the first row to guess format
-    first_row = output[0]
-    # Only log once to avoid spamming (we'll check logs)
-    if not hasattr(post_process_yolo, "has_logged"):
-        logging.info(f"DIAGNOSTIC: Raw Output Row [0]: {first_row[:6]}")
-        post_process_yolo.has_logged = True
-
-    # Check if normalized (values < 1.0)
-    is_normalized = np.max(output[:, :4]) <= 1.0
-    if is_normalized and not hasattr(post_process_yolo, "norm_logged"):
-        logging.info("DIAGNOSTIC: Detected NORMALIZED coordinates (0.0-1.0)")
-        post_process_yolo.norm_logged = True
-
-    x_factor = img_width / input_width
-    y_factor = img_height / input_height
     
-    # If normalized, we scale by the *input* size first to get pixels
-    if is_normalized:
-        x_factor = img_width 
-        y_factor = img_height 
+    # LOGIC FIX: Use image dimensions directly because normalized coordinates (0-1) 
+    # simply need to be multiplied by the total width/height to get pixels.
+    x_factor = img_width
+    y_factor = img_height
 
+    # Get the max confidence score for each anchor
     scores = output[:, 4:]
     max_scores = np.max(scores, axis=1)
     max_indices = np.argmax(scores, axis=1)
     
+    # Filter out weak detections
     valid_indices = np.where(max_scores >= conf_threshold)[0]
     
     for i in valid_indices:
@@ -138,18 +122,26 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
         class_id = max_indices[i]
         row = output[i]
         
-        # YOLO Standard: cx, cy, w, h
+        # YOLO format: center_x, center_y, width, height (Normalized 0-1)
         cx, cy, w, h = row[0], row[1], row[2], row[3]
         
+        # Convert to Top-Left corner (pixels)
         left = int((cx - w/2) * x_factor)
         top = int((cy - h/2) * y_factor)
         width = int(w * x_factor)
         height = int(h * y_factor)
         
+        # Clamp to image boundaries to prevent drawing off-screen
+        left = max(0, left)
+        top = max(0, top)
+        width = min(width, img_width - left)
+        height = min(height, img_height - top)
+        
         boxes.append([left, top, width, height])
         confidences.append(float(score))
         class_ids.append(int(class_id))
 
+    # NMS to remove overlapping boxes
     indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, 0.45)
     
     final_results = []
@@ -168,20 +160,33 @@ def run_inference(image):
     
     try:
         original_h, original_w = image.shape[:2]
+        
+        # 1. Resize
         resized = cv2.resize(image, (input_width, input_height))
-        input_data = np.expand_dims(resized, axis=0)
+        
+        # 2. Convert BGR to RGB
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        
+        # 3. Normalize & Batch
+        input_data = np.expand_dims(rgb, axis=0)
         
         if input_details[0]['dtype'] == np.float32:
             input_data = (input_data.astype(np.float32) / 255.0)
         
+        # 4. Run Inference
         interpreter.set_tensor(input_details[0]['index'], input_data)
         interpreter.invoke()
+        
+        # 5. Get Output
         output_data = interpreter.get_tensor(output_details[0]['index'])
         
+        # 6. Decode
         user_conf = float(config.get("ai_threshold", 0.5))
         detections = post_process_yolo(output_data, original_w, original_h, user_conf)
         
-        if not detections: return 0.0, []
+        if not detections:
+            return 0.0, []
+            
         top_score = max(d['conf'] for d in detections)
         return top_score, detections
         
@@ -189,7 +194,7 @@ def run_inference(image):
         logging.error(f"Inference Error: {e}")
         return 0.0, []
 
-# --- ROUTES (Same as before) ---
+# --- ROUTES ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
@@ -236,6 +241,7 @@ def background_monitor():
 
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
+            # Get Image
             resp = requests.get(config['camera_url'], timeout=2)
             if resp.status_code == 200:
                 arr = np.frombuffer(resp.content, np.uint8)
@@ -255,42 +261,62 @@ def background_monitor():
                 time.sleep(1)
                 continue
 
+            # Run AI
             state["status"] = "monitoring"
             
             if ai_ready:
                 score, detections = run_inference(state["latest_frame"])
                 state["failure_score"] = score
                 
+                # Draw Boxes
                 debug_img = state["latest_frame"].copy()
                 detected_names = []
                 
                 for d in detections:
                     x, y, w, h = d['box']
                     cls_id = d['class']
+                    
                     label = "Failure"
-                    if cls_id < len(CLASS_NAMES): label = CLASS_NAMES[cls_id]
+                    if cls_id < len(CLASS_NAMES):
+                        label = CLASS_NAMES[cls_id]
                     detected_names.append(label)
                     
+                    # Red Box
                     cv2.rectangle(debug_img, (x, y), (x+w, y+h), (0, 0, 255), 2)
+                    
+                    # Label
                     text = f"{label} {int(d['conf']*100)}%"
                     (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                    cv2.rectangle(debug_img, (x, y-15), (x+tw, y), (0, 0, 255), -1)
-                    cv2.putText(debug_img, text, (x, y-3), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                    
+                    # Smart Text Pos (Inside box if at top)
+                    if y < 20: text_y = y + th + 5
+                    else: text_y = y - 5
+                    
+                    cv2.rectangle(debug_img, (x, text_y - th - 2), (x + tw, text_y + 2), (0, 0, 255), -1)
+                    cv2.putText(debug_img, text, (x, text_y), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 
                 state["annotated_frame"] = debug_img
                 
                 max_retries = int(config["consecutive_failures"])
+                
                 if score > float(config["ai_threshold"]):
-                    if state["failure_count"] < max_retries: state["failure_count"] += 1
+                    if state["failure_count"] < max_retries:
+                        state["failure_count"] += 1
+                    
                     primary_cause = detected_names[0] if detected_names else "Failure"
+                    logging.info(f"ALERT: Found {primary_cause} ({score:.2f}) | Count: {state['failure_count']}/{max_retries}")
+                    
                     if state["failure_count"] >= max_retries:
                         state["status"] = "failure_detected"
                         trigger_printer_action(reason=primary_cause)
                 else:
+                    # Slow decay
                     state["failure_count"] = 0
 
         except Exception as e:
             logging.error(f"Loop Error: {e}")
+        
         time.sleep(float(config["check_interval"]) / 1000.0)
 
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
