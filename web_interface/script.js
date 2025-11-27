@@ -8,27 +8,28 @@ const confidenceBar = document.getElementById('confidence-bar');
 const forceStartBtn = document.getElementById('force-start-btn');
 const settingsModal = document.getElementById('settings-modal');
 
+const cameraGrid = document.getElementById('camera-grid');
 const cam1Img = document.getElementById('cam1-img');
 const cam2Img = document.getElementById('cam2-img');
-const cam1Card = cam1Img.closest('.camera-card');
-const cam2Card = cam2Img.closest('.camera-card');
+const cam1Card = document.getElementById('card-cam1');
+const cam2Card = document.getElementById('card-cam2');
 const cam1Toggle = document.getElementById('cam1-toggle');
 const cam2Toggle = document.getElementById('cam2-toggle');
 const cam1View = document.getElementById('cam1-container');
 const cam2View = document.getElementById('cam2-container');
 
-// --- IMAGE REFRESH LOOP (Synced to Check Interval) ---
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
-    // Cap at 100ms minimum for sanity
     const safeRate = (rate && rate >= 100) ? rate : 500;
     
     imageInterval = setInterval(() => {
         const timestamp = new Date().getTime();
+        // Update Cam 1 if enabled
         if (!cam1Card.classList.contains('disabled')) {
             cam1Img.src = `/api/frame/0?t=${timestamp}`;
         }
-        if (!cam2Card.classList.contains('disabled')) {
+        // Update Cam 2 only if enabled AND visible
+        if (!cam2Card.classList.contains('disabled') && !cam2Card.classList.contains('hidden')) {
             cam2Img.src = `/api/frame/1?t=${timestamp}`;
         }
     }, safeRate);
@@ -39,6 +40,7 @@ async function toggleCamera(id, isEnabled) {
     const toggle = id === 0 ? cam1Toggle : cam2Toggle;
     
     toggle.checked = isEnabled;
+    
     if (isEnabled) card.classList.remove('disabled');
     else card.classList.add('disabled');
     
@@ -123,6 +125,25 @@ forceStartBtn.addEventListener('click', async () => {
     } catch (e) {}
 });
 
+// --- LAYOUT MANAGER ---
+function applyLayout(count) {
+    const isSingle = parseInt(count) === 1;
+    
+    if (isSingle) {
+        cameraGrid.classList.add('single-mode');
+        cam2Card.classList.add('hidden');
+        
+        // Hide toggle, but force enable visually (logic handles backend)
+        cam1Card.querySelector('.cam-controls').style.display = 'none';
+        document.getElementById('cam2-settings-row').style.display = 'none';
+    } else {
+        cameraGrid.classList.remove('single-mode');
+        cam2Card.classList.remove('hidden');
+        cam1Card.querySelector('.cam-controls').style.display = 'flex';
+        document.getElementById('cam2-settings-row').style.display = 'flex';
+    }
+}
+
 async function loadSettings() {
     try {
         const res = await fetch('/api/settings');
@@ -130,16 +151,18 @@ async function loadSettings() {
         
         const cam1 = currentSettings.cameras[0];
         const cam2 = currentSettings.cameras[1];
+        
         toggleCamera(0, cam1.enabled);
         toggleCamera(1, cam2.enabled);
 
+        // Populate UI
+        document.getElementById('camera_count').value = currentSettings.camera_count || 2;
         document.getElementById('cam1_url_input').value = cam1.url;
         document.getElementById('cam2_url_input').value = cam2.url;
         
-        document.getElementById('moonraker_url').value = currentSettings.moonraker_url || "[http://127.0.0.1:7125](http://127.0.0.1:7125)";
+        document.getElementById('moonraker_url').value = currentSettings.moonraker_url || "http://127.0.0.1:7125";
         document.getElementById('check_interval').value = currentSettings.check_interval;
         
-        // CONVERT 0.3 -> 30
         document.getElementById('warn_threshold').value = Math.round((currentSettings.warn_threshold || 0.30) * 100);
         document.getElementById('ai_threshold').value = Math.round((currentSettings.ai_threshold || 0.50) * 100);
         
@@ -151,7 +174,9 @@ async function loadSettings() {
         cam1View.style.aspectRatio = ratio;
         cam2View.style.aspectRatio = ratio;
         
-        // Use Check Interval for Refresh Rate
+        // Apply Camera Count Layout
+        applyLayout(currentSettings.camera_count || 2);
+        
         startImageLoop(currentSettings.check_interval);
     } catch (e) { console.error(e); }
 }
@@ -164,15 +189,22 @@ document.getElementById('open-settings-btn').addEventListener('click', () => {
 document.getElementById('close-modal-x').addEventListener('click', () => settingsModal.close());
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
-    // Grab Check Interval for both Backend and Frontend
     const newInterval = parseInt(document.getElementById('check_interval').value);
+    const camCount = parseInt(document.getElementById('camera_count').value);
     
+    currentSettings.camera_count = camCount;
     currentSettings.cameras[0].url = document.getElementById('cam1_url_input').value;
+    
+    // Force Enable Cam 1 if single mode
+    if (camCount === 1) {
+        currentSettings.cameras[0].enabled = true;
+    }
+    
     currentSettings.cameras[1].url = document.getElementById('cam2_url_input').value;
+    
     currentSettings.moonraker_url = document.getElementById('moonraker_url').value;
     currentSettings.check_interval = newInterval;
     
-    // CONVERT 30 -> 0.3
     currentSettings.warn_threshold = parseInt(document.getElementById('warn_threshold').value) / 100.0;
     currentSettings.ai_threshold = parseInt(document.getElementById('ai_threshold').value) / 100.0;
     
@@ -190,7 +222,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     cam1View.style.aspectRatio = ratio;
     cam2View.style.aspectRatio = ratio;
     
-    // Sync Refresh with Check Interval
+    applyLayout(camCount);
     startImageLoop(newInterval); 
     
     alert("Configuration Saved!");
