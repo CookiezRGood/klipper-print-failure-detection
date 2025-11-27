@@ -8,11 +8,11 @@ import json
 import os
 from flask import Flask, jsonify, request, Response, send_from_directory
 
-# --- LOGGING SETUP ---
+# --- LOGGING ---
 log = logging.getLogger('werkzeug')
 log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: INSTANT TOGGLE UPDATE <<<")
+logging.info(">>> STARTING PLUGIN: MULTI-CAM + MANUAL BOX FIX <<<")
 
 # Import YOLO Engine
 try:
@@ -26,10 +26,7 @@ app = Flask(__name__, static_folder='web_interface')
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.pt')
 
-# --- GLOBAL EVENT TRIGGER ---
-# This allows us to wake up the background loop immediately when settings change
-update_event = threading.Event()
-
+# Update this if your model has different classes
 CLASS_NAMES = ["Spaghetti", "Stringing", "Zits"]
 
 default_config = {
@@ -51,6 +48,7 @@ if os.path.exists(SETTINGS_FILE):
     try:
         with open(SETTINGS_FILE, 'r') as f:
             loaded = json.load(f)
+            # Migration for legacy config
             if "camera_url" in loaded:
                 config["cameras"][0]["url"] = loaded["camera_url"]
             config.update(loaded)
@@ -62,6 +60,7 @@ def save_config_to_file():
             json.dump(config, f, indent=4)
     except Exception: pass
 
+# --- GLOBAL STATE ---
 state = {
     "status": "idle",
     "failure_count": 0,
@@ -99,15 +98,12 @@ def action_start():
     state["monitoring_active"] = True
     state["failure_count"] = 0
     state["action_triggered"] = False
-    # Wake up loop immediately to start processing
-    update_event.set()
     logging.info("Monitoring STARTED")
     return jsonify({"success": True})
 
 @app.route('/api/action/stop', methods=['POST', 'GET'])
 def action_stop():
     state["monitoring_active"] = False
-    update_event.set()
     logging.info("Monitoring STOPPED")
     return jsonify({"success": True})
 
@@ -145,12 +141,10 @@ def background_monitor():
 
             max_frame_score = 0.0
             
-            # --- PROCESS CAMERAS ---
+            # --- CAMERA LOOP ---
             for cam in config["cameras"]:
                 cam_id = cam["id"]
-                
-                # Instant Disable Logic
-                if not cam["enabled"] or not cam["url"]:
+                if not cam["enabled"] or not cam["url"]: 
                     state["cameras"][cam_id]["score"] = 0.0
                     continue
 
@@ -160,48 +154,65 @@ def background_monitor():
                         arr = np.frombuffer(resp.content, np.uint8)
                         img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                         
+                        # Idle Mode: Just save raw frame
                         if not should_run:
                             state["cameras"][cam_id]["frame"] = img
                             state["cameras"][cam_id]["score"] = 0.0
                             continue
                         
+                        # Active Mode: Run AI & Draw Boxes
                         cam_high_score = 0.0
+                        debug_img = img.copy()
+                        
                         if model:
                             user_conf = float(config.get("ai_threshold", 0.5))
                             results = model(img, conf=user_conf, verbose=False)
                             result = results[0]
                             
-                            # Manual Drawing
-                            debug_img = img.copy()
-                            
+                            # --- MANUAL DRAWING LOGIC ---
                             if len(result.boxes) > 0:
                                 for box in result.boxes:
+                                    # Get Pixel Coordinates [x1, y1, x2, y2]
                                     coords = box.xyxy[0].cpu().numpy().astype(int)
+                                    x1, y1, x2, y2 = coords
+                                    
                                     conf = float(box.conf[0])
                                     cls_id = int(box.cls[0])
                                     
-                                    if conf > cam_high_score: cam_high_score = conf
+                                    if conf > cam_high_score: 
+                                        cam_high_score = conf
                                     
-                                    label = "Failure"
-                                    if cls_id < len(CLASS_NAMES): label = CLASS_NAMES[cls_id]
+                                    label = CLASS_NAMES[cls_id] if cls_id < len(CLASS_NAMES) else "Failure"
                                     
-                                    x1, y1, x2, y2 = coords
+                                    # Clamp coordinates to image bounds
                                     h_img, w_img = debug_img.shape[:2]
-                                    x1 = max(0, min(x1, w_img)); x2 = max(0, min(x2, w_img))
-                                    y1 = max(0, min(y1, h_img)); y2 = max(0, min(y2, h_img))
-                                    
+                                    x1 = max(0, min(x1, w_img))
+                                    y1 = max(0, min(y1, h_img))
+                                    x2 = max(0, min(x2, w_img))
+                                    y2 = max(0, min(y2, h_img))
+
+                                    # Draw Red Box
                                     cv2.rectangle(debug_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                                    
+                                    # Draw Label
                                     text = f"{label} {int(conf*100)}%"
                                     (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                                    text_y = y1 + th + 5 if y1 < 20 else y1 - 5
+                                    
+                                    # Ensure label stays on screen
+                                    text_y = y1 - 5 if y1 > 25 else y1 + th + 5
+                                    
+                                    # Text Background
                                     cv2.rectangle(debug_img, (x1, text_y - th - 2), (x1 + tw, text_y + 2), (0, 0, 255), -1)
-                                    cv2.putText(debug_img, text, (x1, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                            
-                            state["cameras"][cam_id]["frame"] = debug_img
-                            state["cameras"][cam_id]["score"] = cam_high_score
-                            
+                                    # Text
+                                    cv2.putText(debug_img, text, (x1, text_y), 
+                                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
                             if cam_high_score > max_frame_score:
                                 max_frame_score = cam_high_score
+                            
+                        # Save the DRAWN image to state
+                        state["cameras"][cam_id]["frame"] = debug_img
+                        state["cameras"][cam_id]["score"] = cam_high_score
 
                 except Exception: pass
 
@@ -233,17 +244,12 @@ def background_monitor():
         except Exception as e:
             logging.error(f"Loop Error: {e}")
         
-        # --- SMART SLEEP ---
-        # Instead of time.sleep(), we use wait().
-        # If settings change (update_event is set), this returns immediately.
-        sleep_ms = float(config.get("check_interval", 500))
-        update_event.wait(sleep_ms / 1000.0)
-        update_event.clear() # Reset flag
+        time.sleep(float(config["check_interval"]) / 1000.0)
 
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
-# Routes
+# --- ROUTES ---
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 @app.route('/<path:path>')
@@ -254,8 +260,6 @@ def settings():
     if request.method == 'POST':
         config.update(request.json)
         save_config_to_file()
-        # WAKE UP LOOP INSTANTLY
-        update_event.set()
         return jsonify({"status": "saved", "config": config})
     return jsonify(config)
 
