@@ -50,7 +50,8 @@ async function toggleCamera(id, isEnabled) {
         card.classList.add('disabled');
     }
     
-    if (currentSettings.cameras) {
+    // Safety Check: Don't crash if settings aren't loaded yet
+    if (currentSettings && currentSettings.cameras) {
         currentSettings.cameras[id].enabled = isEnabled;
         try {
             await fetch('/api/settings', {
