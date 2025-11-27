@@ -27,7 +27,6 @@ header {
     padding-bottom: 15px;
     margin-bottom: 20px;
 }
-
 h2 { margin: 0; font-weight: 600; color: #fff; }
 
 .status-badge {
@@ -41,12 +40,12 @@ h2 { margin: 0; font-weight: 600; color: #fff; }
     letter-spacing: 0.5px;
 }
 
-/* --- Camera Grid System --- */
+/* --- Camera Grid --- */
 .camera-grid {
     display: flex;
     gap: 20px;
     justify-content: space-between;
-    flex-wrap: wrap; /* Allows stacking on mobile */
+    flex-wrap: wrap;
 }
 
 .camera-card {
@@ -57,7 +56,6 @@ h2 { margin: 0; font-weight: 600; color: #fff; }
     border-radius: 6px;
     border: 1px solid #333;
     position: relative;
-    transition: opacity 0.3s;
 }
 
 .cam-header h3 {
@@ -73,7 +71,7 @@ h2 { margin: 0; font-weight: 600; color: #fff; }
     position: relative;
     border-radius: 4px;
     overflow: hidden;
-    /* Aspect Ratio is injected by JS */
+    aspect-ratio: 16/9; /* Default, overridden by JS */
 }
 
 img.live-feed {
@@ -88,7 +86,7 @@ img.live-feed {
     position: absolute;
     top: 0; left: 0; width: 100%; height: 100%;
     background-color: #222;
-    display: none; /* Hidden by default */
+    display: none;
     align-items: center;
     justify-content: center;
     color: #666;
@@ -97,23 +95,16 @@ img.live-feed {
     z-index: 10;
 }
 
-/* Toggle Classes */
-.camera-card.disabled .disabled-overlay {
-    display: flex;
-}
+.camera-card.disabled .disabled-overlay { display: flex; }
+.camera-card.disabled img { opacity: 0; }
 
-.camera-card.disabled img {
-    opacity: 0;
-}
-
-/* Controls under camera */
 .cam-controls {
     margin-top: 10px;
     display: flex;
     justify-content: center;
 }
 
-/* --- Health Bar Section --- */
+/* --- Health Bar --- */
 .health-section {
     margin-top: 20px;
     background-color: #252525;
@@ -121,7 +112,6 @@ img.live-feed {
     border-radius: 6px;
     border: 1px solid #333;
 }
-
 .health-header {
     display: flex;
     justify-content: space-between;
@@ -129,7 +119,6 @@ img.live-feed {
     color: #bbb;
     margin-bottom: 8px;
 }
-
 .health-header span span { color: white; font-weight: bold; }
 
 .progress-track {
@@ -139,15 +128,14 @@ img.live-feed {
     border-radius: 6px;
     overflow: hidden;
 }
-
 .progress-fill {
     height: 100%;
-    width: 0%; /* Starts empty */
+    width: 0%;
     background: #4CAF50;
     transition: width 0.5s ease, background 0.5s ease;
 }
 
-/* --- Main Controls --- */
+/* --- Controls --- */
 .controls {
     margin-top: 15px;
     display: flex;
@@ -172,25 +160,17 @@ button {
 }
 .secondary-btn:hover { background-color: #444; }
 
-.primary-btn {
-    background-color: #2196F3;
-    color: white;
-}
+.primary-btn { background-color: #2196F3; color: white; }
 .primary-btn:hover { background-color: #1976D2; }
 
-/* State Colors */
 .btn-success { background-color: #4CAF50 !important; color: white; }
 .btn-success:hover { background-color: #45a049 !important; }
 
 .btn-danger { background-color: #F44336 !important; color: white; }
 .btn-danger:hover { background-color: #d32f2f !important; }
 
-.btn-primary { background-color: #2196F3 !important; color: white; }
-
-/* --- Toggle Switch CSS --- */
-.toggle-switch {
-    display: flex; align-items: center; cursor: pointer; user-select: none;
-}
+/* --- Toggles --- */
+.toggle-switch { display: flex; align-items: center; cursor: pointer; user-select: none; }
 .toggle-switch input { display: none; }
 .toggle-switch .slider {
     width: 36px; height: 18px; background-color: #444; border-radius: 18px;
@@ -204,7 +184,7 @@ button {
 .toggle-switch input:checked + .slider::before { transform: translateX(18px); }
 .label-text { font-size: 0.9rem; color: #ccc; }
 
-/* --- Settings Modal --- */
+/* --- Modal --- */
 dialog {
     background-color: #1e1e1e; color: #e0e0e0; border: 1px solid #333;
     border-radius: 8px; padding: 0; width: 450px;
@@ -217,21 +197,15 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
     justify-content: space-between; align-items: center; border-bottom: 1px solid #333;
 }
 .modal-header h3 { margin: 0; font-size: 1rem; color: #fff; }
-
 .modal-body { padding: 20px; max-height: 70vh; overflow-y: auto; }
 
-.setting-group {
-    margin-bottom: 20px;
-    border-bottom: 1px solid #333;
-    padding-bottom: 10px;
-}
+.setting-group { margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 10px; }
 .setting-group h4 { margin-top: 0; color: #2196F3; margin-bottom: 15px; }
 
 .setting-row { margin-bottom: 15px; }
 .setting-row label { display: block; margin-bottom: 5px; font-size: 0.9rem; color: #bbb; }
 
-.setting-row input[type="text"], 
-.setting-row input[type="number"] {
+.setting-row input {
     width: 100%; background-color: #121212; border: 1px solid #333;
     color: white; padding: 8px; border-radius: 4px; box-sizing: border-box;
 }
@@ -241,12 +215,9 @@ select {
     width: 100%; background-color: #121212; border: 1px solid #333;
     color: white; padding: 8px; border-radius: 4px; box-sizing: border-box; cursor: pointer;
 }
-
 .modal-footer { padding: 15px; border-top: 1px solid #333; text-align: right; }
-
-.icon-btn { background: transparent; color: #999; border: none; font-size: 1.5rem; cursor: pointer; padding: 0 5px; }
+.icon-btn { background: transparent; color: #999; border: none; font-size: 1.5rem; cursor: pointer; }
 .icon-btn:hover { color: #fff; }
-
 .help-text {
     font-size: 0.8rem; color: #888; margin-top: -10px; margin-bottom: 15px;
     font-style: italic; background-color: #222; padding: 8px; border-radius: 4px;
