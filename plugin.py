@@ -12,7 +12,7 @@ from flask import Flask, jsonify, request, Response, send_from_directory
 log = logging.getLogger('werkzeug')
 log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: PERCENTAGE UI UPDATE <<<")
+logging.info(">>> STARTING PLUGIN: DYNAMIC CAMERA LAYOUT <<<")
 
 # Import TFLite Runtime
 try:
@@ -33,13 +33,15 @@ default_config = {
         {"id": 0, "name": "Primary", "url": "http://127.0.0.1/webcam/?action=snapshot", "enabled": True},
         {"id": 1, "name": "Secondary", "url": "", "enabled": False}
     ],
+    "camera_count": 2,          # <--- NEW SETTING
     "moonraker_url": "http://127.0.0.1:7125",
-    "check_interval": 500,      # Used for both AI loop AND UI Refresh now
-    "warn_threshold": 0.30,
+    "check_interval": 500,
     "ai_threshold": 0.50,
+    "warn_threshold": 0.30,
     "consecutive_failures": 2,
     "on_failure": "pause",
-    "aspect_ratio": "16:9"
+    "aspect_ratio": "16:9",
+    "preview_refresh_rate": 500
 }
 
 config = default_config.copy()
@@ -75,10 +77,9 @@ input_details = None
 output_details = None
 input_height = 640
 input_width = 640
-input_dtype = np.float32
 
 def load_model():
-    global interpreter, input_details, output_details, input_height, input_width, input_dtype
+    global interpreter, input_details, output_details, input_height, input_width
     if not os.path.exists(MODEL_PATH):
         logging.error(f"CRITICAL: model.tflite NOT FOUND at {MODEL_PATH}")
         return False
@@ -93,7 +94,6 @@ def load_model():
         input_shape = input_details[0]['shape']
         input_height = input_shape[1]
         input_width = input_shape[2]
-        input_dtype = input_details[0]['dtype']
         
         logging.info(f"TFLite Model Loaded. Shape: {input_shape}")
         return True
@@ -113,16 +113,8 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
     confidences = []
     class_ids = []
     
-    # Auto-detect scale
-    sample_coords = output[:, :4].flatten()
-    is_normalized = np.max(sample_coords) <= 1.5 
-    
-    if is_normalized:
-        x_factor = img_width
-        y_factor = img_height
-    else:
-        x_factor = img_width / input_width
-        y_factor = img_height / input_height
+    x_factor = img_width / input_width
+    y_factor = img_height / input_height
 
     scores = output[:, 4:]
     max_scores = np.max(scores, axis=1)
@@ -141,11 +133,6 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
         top = int((cy - h/2) * y_factor)
         width = int(w * x_factor)
         height = int(h * y_factor)
-        
-        left = max(0, left)
-        top = max(0, top)
-        width = min(width, img_width - left)
-        height = min(height, img_height - top)
         
         boxes.append([left, top, width, height])
         confidences.append(score)
@@ -175,9 +162,7 @@ def run_inference(image):
         
         if input_details[0]['dtype'] == np.float32:
             input_data = (input_data.astype(np.float32) / 255.0)
-        elif input_details[0]['dtype'] == np.uint8:
-            input_data = input_data.astype(np.uint8)
-            
+        
         interpreter.set_tensor(input_details[0]['index'], input_data)
         interpreter.invoke()
         
@@ -243,8 +228,17 @@ def background_monitor():
 
             max_frame_score = 0.0
             
+            # Limit loop based on Camera Count setting
+            cam_limit = int(config.get("camera_count", 2))
+            
             for cam in config["cameras"]:
                 cam_id = cam["id"]
+                
+                # Skip camera if ID exceeds limit (e.g. ID 1 when limit is 1)
+                if cam_id >= cam_limit:
+                    state["cameras"][cam_id]["score"] = 0.0
+                    continue
+
                 if not cam["enabled"] or not cam["url"]: 
                     state["cameras"][cam_id]["score"] = 0.0
                     continue
@@ -312,7 +306,9 @@ def background_monitor():
             if max_frame_score > threshold:
                 if state["failure_count"] < max_retries:
                     state["failure_count"] += 1
+                
                 logging.info(f"ALERT: Failure {max_frame_score:.2f} | Count: {state['failure_count']}")
+                
                 if state["failure_count"] >= max_retries:
                     state["status"] = "failure_detected"
                     trigger_printer_action(reason="AI Detection")
