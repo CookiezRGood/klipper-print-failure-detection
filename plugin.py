@@ -12,12 +12,13 @@ from flask import Flask, jsonify, request, Response, send_from_directory
 log = logging.getLogger('werkzeug')
 log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: MULTI-CAMERA SUPPORT <<<")
+logging.info(">>> STARTING PLUGIN: MULTI-CAM + MANUAL DRAWING <<<")
 
+# Import YOLO Engine
 try:
     from ultralytics import YOLO
 except ImportError:
-    logging.warning("CRITICAL: Ultralytics not found.")
+    logging.warning("CRITICAL: Ultralytics not found. AI will not work.")
     YOLO = None
 
 app = Flask(__name__, static_folder='web_interface')
@@ -25,8 +26,10 @@ app = Flask(__name__, static_folder='web_interface')
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.pt')
 
+# --- CLASS NAMES ---
+CLASS_NAMES = ["Spaghetti", "Stringing", "Zits"]
+
 default_config = {
-    # New Camera Structure
     "cameras": [
         {"id": 0, "name": "Primary", "url": "http://127.0.0.1/webcam/?action=snapshot", "enabled": True},
         {"id": 1, "name": "Secondary", "url": "", "enabled": False}
@@ -41,25 +44,14 @@ default_config = {
 }
 
 config = default_config.copy()
-
-# --- SETTINGS MIGRATION ---
 if os.path.exists(SETTINGS_FILE):
     try:
         with open(SETTINGS_FILE, 'r') as f:
             loaded = json.load(f)
-            
-            # Migrate old single camera_url to new structure
+            # Migration for old config style
             if "camera_url" in loaded:
-                logging.info("Migrating legacy settings to Multi-Camera format...")
                 config["cameras"][0]["url"] = loaded["camera_url"]
-                del loaded["camera_url"] # Remove old key
-            
             config.update(loaded)
-            
-            # Ensure structure integrity
-            if "cameras" not in config or not isinstance(config["cameras"], list):
-                config["cameras"] = default_config["cameras"]
-                
     except Exception: pass
 
 def save_config_to_file():
@@ -69,7 +61,6 @@ def save_config_to_file():
     except Exception: pass
 
 # --- GLOBAL STATE ---
-# Now stores state PER CAMERA
 state = {
     "status": "idle",
     "failure_count": 0,
@@ -91,6 +82,7 @@ def load_model():
         return False
     
     try:
+        logging.info("Loading YOLOv8 Model...")
         model = YOLO(MODEL_PATH, task='detect')
         logging.info("YOLOv8 Model Loaded.")
         return True
@@ -125,13 +117,13 @@ def get_printer_state():
     except Exception: pass
     return "standby"
 
-def trigger_printer_action():
+def trigger_printer_action(reason="Failure"):
     if state["action_triggered"]: return 
     action = config.get("on_failure", "nothing")
     url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
-    logging.info(f"FAILURE CONFIRMED. Action: {action}")
+    logging.info(f"FAILURE CONFIRMED: {reason}. Action: {action}")
     try:
-        console_msg = f"M118 >>> FAILURE DETECTED! Action: {action.upper()} <<<"
+        console_msg = f"M118 >>> AI DETECTED {reason.upper()}! Action: {action.upper()} <<<"
         requests.post(f"{url}/printer/gcode/script", json={"script": console_msg})
         if action == "pause": requests.post(f"{url}/printer/print/pause")
         elif action == "cancel": requests.post(f"{url}/printer/print/cancel")
@@ -146,50 +138,95 @@ def background_monitor():
                 state["monitoring_active"] = False
 
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
-
-            # --- PROCESS EACH ENABLED CAMERA ---
+            
+            # --- MULTI-CAMERA LOOP ---
             max_frame_score = 0.0
-            any_cam_active = False
-
+            active_cam_count = 0
+            
             for cam in config["cameras"]:
                 cam_id = cam["id"]
-                if not cam["enabled"] or not cam["url"]: 
+                
+                # If disabled or empty URL, skip
+                if not cam["enabled"] or not cam["url"]:
+                    # Keep state clean/empty
+                    state["cameras"][cam_id]["score"] = 0.0
+                    # We don't clear the frame here so the "Disabled" overlay can work in UI
                     continue
                 
-                any_cam_active = True
-                
-                # Fetch
+                active_cam_count += 1
+
+                # 1. Fetch Image
                 try:
                     resp = requests.get(cam["url"], timeout=2)
                     if resp.status_code == 200:
                         arr = np.frombuffer(resp.content, np.uint8)
                         img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                         
-                        # If Idle, just save raw frame and skip AI
+                        # If Idle/Off, just save raw frame
                         if not should_run:
                             state["cameras"][cam_id]["frame"] = img
                             state["cameras"][cam_id]["score"] = 0.0
                             continue
-
-                        # Run AI
+                        
+                        # 2. Run AI Inference
                         if model:
-                            results = model(img, conf=float(config.get("ai_threshold", 0.5)), verbose=False)
+                            user_conf = float(config.get("ai_threshold", 0.5))
+                            results = model(img, conf=user_conf, verbose=False)
                             result = results[0]
-                            annotated = result.plot()
                             
-                            # Check for boxes
-                            if len(result.boxes) > 0:
-                                top_conf = float(result.boxes.conf[0])
-                                if top_conf > max_frame_score:
-                                    max_frame_score = top_conf
-                                state["cameras"][cam_id]["score"] = top_conf
+                            # --- MANUAL DRAWING ---
+                            debug_img = img.copy()
+                            box_count = len(result.boxes)
+                            cam_high_score = 0.0
+                            
+                            if box_count > 0:
+                                for box in result.boxes:
+                                    coords = box.xyxy[0].cpu().numpy().astype(int)
+                                    conf = float(box.conf[0])
+                                    cls_id = int(box.cls[0])
+                                    
+                                    if conf > cam_high_score: cam_high_score = conf
+                                    
+                                    label = "Failure"
+                                    if cls_id < len(CLASS_NAMES): label = CLASS_NAMES[cls_id]
+                                    
+                                    x1, y1, x2, y2 = coords
+                                    
+                                    # Clamp
+                                    h_img, w_img = debug_img.shape[:2]
+                                    x1 = max(0, min(x1, w_img)); x2 = max(0, min(x2, w_img))
+                                    y1 = max(0, min(y1, h_img)); y2 = max(0, min(y2, h_img))
+                                    
+                                    # Draw Red Box
+                                    cv2.rectangle(debug_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                                    
+                                    # Smart Label
+                                    text = f"{label} {int(conf*100)}%"
+                                    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                                    
+                                    if y1 < 20: text_y = y1 + th + 5
+                                    else: text_y = y1 - 5
+                                    
+                                    cv2.rectangle(debug_img, (x1, text_y - th - 2), (x1 + tw, text_y + 2), (0, 0, 255), -1)
+                                    cv2.putText(debug_img, text, (x1, text_y), 
+                                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+                                # Update this camera's score
+                                state["cameras"][cam_id]["score"] = cam_high_score
+                                # Update global max
+                                if cam_high_score > max_frame_score:
+                                    max_frame_score = cam_high_score
+                                    
                             else:
                                 state["cameras"][cam_id]["score"] = 0.0
                             
-                            state["cameras"][cam_id]["frame"] = annotated
+                            # Save drawn frame
+                            state["cameras"][cam_id]["frame"] = debug_img
                 except Exception:
-                    pass # Skip camera if connection fails
+                    # Connection error to this specific camera
+                    pass
 
+            # --- GLOBAL STATE UPDATE ---
             if not should_run:
                 state["status"] = "idle"
                 state["failure_count"] = 0
@@ -197,23 +234,25 @@ def background_monitor():
                 time.sleep(1)
                 continue
 
-            # --- GLOBAL FAILURE LOGIC ---
             state["status"] = "monitoring"
             
+            # Global Failure Logic
             threshold = float(config.get("ai_threshold", 0.5))
+            max_retries = int(config["consecutive_failures"])
             
-            # If ANY camera sees failure > threshold
             if max_frame_score > threshold:
-                if state["failure_count"] < int(config["consecutive_failures"]):
+                if state["failure_count"] < max_retries:
                     state["failure_count"] += 1
                 
                 logging.info(f"ALERT: Failure detected! Score: {max_frame_score:.2f} | Count: {state['failure_count']}")
                 
-                if state["failure_count"] >= int(config["consecutive_failures"]):
+                if state["failure_count"] >= max_retries:
                     state["status"] = "failure_detected"
-                    trigger_printer_action()
+                    trigger_printer_action(reason="AI Detection")
             else:
-                state["failure_count"] = 0
+                # Decay
+                if state["failure_count"] > 0:
+                     state["failure_count"] -= 1
 
         except Exception as e:
             logging.error(f"Loop Error: {e}")
@@ -223,7 +262,7 @@ def background_monitor():
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
-# Routes
+# --- API ROUTES ---
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 @app.route('/<path:path>')
@@ -250,10 +289,11 @@ def get_status():
 
 @app.route('/api/frame/<int:cam_id>')
 def get_frame(cam_id):
-    # Safety check
+    # If cam_id doesn't exist or has no frame, return black image
     if cam_id not in state["cameras"] or state["cameras"][cam_id]["frame"] is None:
         blank = np.zeros((360, 640, 3), np.uint8)
-        cv2.putText(blank, "NO SIGNAL", (50, 180), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+        # Optional: Draw "NO SIGNAL" text on black frame
+        cv2.putText(blank, "NO SIGNAL / DISABLED", (50, 180), cv2.FONT_HERSHEY_SIMPLEX, 1, (100,100,100), 2)
         _, buffer = cv2.imencode('.jpg', blank)
         return Response(buffer.tobytes(), mimetype='image/jpeg')
         
