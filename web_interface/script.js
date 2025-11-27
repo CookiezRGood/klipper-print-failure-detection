@@ -1,7 +1,6 @@
 let imageInterval; 
 let currentSettings = {};
 
-// DOM Elements
 const statusBadge = document.getElementById('status-indicator');
 const ssimText = document.getElementById('ssim-val');
 const retryText = document.getElementById('retry-val');
@@ -9,7 +8,6 @@ const confidenceBar = document.getElementById('confidence-bar');
 const forceStartBtn = document.getElementById('force-start-btn');
 const settingsModal = document.getElementById('settings-modal');
 
-// Camera Elements
 const cam1Img = document.getElementById('cam1-img');
 const cam2Img = document.getElementById('cam2-img');
 const cam1Card = cam1Img.closest('.camera-card');
@@ -19,39 +17,30 @@ const cam2Toggle = document.getElementById('cam2-toggle');
 const cam1View = document.getElementById('cam1-container');
 const cam2View = document.getElementById('cam2-container');
 
-// --- IMAGE REFRESH LOOP ---
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
     const safeRate = (rate && rate >= 100) ? rate : 500;
     
     imageInterval = setInterval(() => {
         const timestamp = new Date().getTime();
-        
         if (!cam1Card.classList.contains('disabled')) {
             cam1Img.src = `/api/frame/0?t=${timestamp}`;
         }
-        
         if (!cam2Card.classList.contains('disabled')) {
             cam2Img.src = `/api/frame/1?t=${timestamp}`;
         }
     }, safeRate);
 }
 
-// --- TOGGLE HANDLERS ---
 async function toggleCamera(id, isEnabled) {
     const card = id === 0 ? cam1Card : cam2Card;
     const toggle = id === 0 ? cam1Toggle : cam2Toggle;
     
     toggle.checked = isEnabled;
+    if (isEnabled) card.classList.remove('disabled');
+    else card.classList.add('disabled');
     
-    if (isEnabled) {
-        card.classList.remove('disabled');
-    } else {
-        card.classList.add('disabled');
-    }
-    
-    // Safety Check: Don't crash if settings aren't loaded yet
-    if (currentSettings && currentSettings.cameras) {
+    if (currentSettings.cameras) {
         currentSettings.cameras[id].enabled = isEnabled;
         try {
             await fetch('/api/settings', {
@@ -66,7 +55,6 @@ async function toggleCamera(id, isEnabled) {
 cam1Toggle.addEventListener('change', (e) => toggleCamera(0, e.target.checked));
 cam2Toggle.addEventListener('change', (e) => toggleCamera(1, e.target.checked));
 
-// --- BUTTON STATE ---
 function setButtonState(mode) {
     forceStartBtn.classList.remove('btn-success', 'btn-danger', 'btn-primary');
     if (mode === 'start') {
@@ -82,7 +70,6 @@ function setButtonState(mode) {
     }
 }
 
-// --- STATUS POLLING ---
 async function updateStatus() {
     try {
         const res = await fetch('/api/status');
@@ -92,16 +79,16 @@ async function updateStatus() {
         statusBadge.innerText = statusText;
         
         if (data.status === 'failure_detected' || data.status === 'error') {
-            statusBadge.style.backgroundColor = '#F44336'; // Red
+            statusBadge.style.backgroundColor = '#F44336'; 
             setButtonState('stop');
         } else if (data.status === 'monitoring') {
-            statusBadge.style.backgroundColor = '#4CAF50'; // Green
+            statusBadge.style.backgroundColor = '#4CAF50'; 
             setButtonState('stop');
         } else if (data.status === 'idle') {
-            statusBadge.style.backgroundColor = '#555555'; // Grey
+            statusBadge.style.backgroundColor = '#555555'; 
             setButtonState('start');
         } else {
-            statusBadge.style.backgroundColor = '#f39c12'; // Orange
+            statusBadge.style.backgroundColor = '#f39c12'; 
         }
 
         const failPercent = Math.round(data.score * 100);
@@ -109,19 +96,23 @@ async function updateStatus() {
         retryText.innerText = `${data.failures}/${data.max_retries}`;
         confidenceBar.style.width = `${failPercent}%`;
 
-        if (data.failures > 0) {
-            confidenceBar.style.background = '#FF5722';
-        } else if (failPercent > 50) {
-            confidenceBar.style.background = '#FFC107';
+        // DUAL THRESHOLD VISUALS
+        // We use the loaded settings to color the bar
+        const warnT = (currentSettings.warn_threshold || 0.3) * 100;
+        const failT = (currentSettings.ai_threshold || 0.6) * 100;
+
+        if (data.failures > 0 || failPercent >= failT) {
+            confidenceBar.style.background = '#FF5722'; // Red/Orange
+        } else if (failPercent >= warnT) {
+            confidenceBar.style.background = '#FFC107'; // Yellow
         } else {
-            confidenceBar.style.background = '#4CAF50';
+            confidenceBar.style.background = '#4CAF50'; // Green
         }
 
     } catch (e) { console.log("Status error", e); }
 }
 setInterval(updateStatus, 1000);
 
-// --- BUTTON CLICK ---
 forceStartBtn.addEventListener('click', async () => {
     const action = forceStartBtn.dataset.action;
     const method = { method: 'POST' };
@@ -132,26 +123,26 @@ forceStartBtn.addEventListener('click', async () => {
     } catch (e) {}
 });
 
-// --- SETTINGS LOADING ---
 async function loadSettings() {
     try {
         const res = await fetch('/api/settings');
         currentSettings = await res.json();
         
-        // Init Cameras
         const cam1 = currentSettings.cameras[0];
         const cam2 = currentSettings.cameras[1];
         
         toggleCamera(0, cam1.enabled);
         toggleCamera(1, cam2.enabled);
-        
-        // Populate Inputs
+
         document.getElementById('cam1_url_input').value = cam1.url;
         document.getElementById('cam2_url_input').value = cam2.url;
         
         document.getElementById('moonraker_url').value = currentSettings.moonraker_url || "http://127.0.0.1:7125";
         document.getElementById('check_interval').value = currentSettings.check_interval;
-        document.getElementById('ai_threshold').value = currentSettings.ai_threshold;
+        
+        document.getElementById('warn_threshold').value = currentSettings.warn_threshold || 0.30;
+        document.getElementById('ai_threshold').value = currentSettings.ai_threshold || 0.60;
+        
         document.getElementById('consecutive_failures').value = currentSettings.consecutive_failures;
         document.getElementById('on_failure').value = currentSettings.on_failure || "nothing";
         document.getElementById('aspect_ratio').value = currentSettings.aspect_ratio || "16:9";
@@ -180,7 +171,10 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     
     currentSettings.moonraker_url = document.getElementById('moonraker_url').value;
     currentSettings.check_interval = parseInt(document.getElementById('check_interval').value);
+    
+    currentSettings.warn_threshold = parseFloat(document.getElementById('warn_threshold').value);
     currentSettings.ai_threshold = parseFloat(document.getElementById('ai_threshold').value);
+    
     currentSettings.consecutive_failures = parseInt(document.getElementById('consecutive_failures').value);
     currentSettings.on_failure = document.getElementById('on_failure').value;
     currentSettings.aspect_ratio = document.getElementById('aspect_ratio').value;
