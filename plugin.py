@@ -8,24 +8,25 @@ import json
 import os
 from flask import Flask, jsonify, request, Response, send_from_directory
 
+# Import TFLite Runtime
+try:
+    import tflite_runtime.interpreter as tflite
+except ImportError:
+    logging.warning("CRITICAL: tflite-runtime not found. AI will not work.")
+    tflite = None
+
 # --- LOGGING ---
 log = logging.getLogger('werkzeug')
 log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: MULTI-CAM YOLO <<<")
-
-# Import YOLO Engine
-try:
-    from ultralytics import YOLO
-except ImportError:
-    logging.warning("CRITICAL: Ultralytics not found. AI will not work.")
-    YOLO = None
+logging.info(">>> STARTING PLUGIN: AUTO-TYPE DETECT <<<")
 
 app = Flask(__name__, static_folder='web_interface')
 
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.pt')
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.tflite')
 
+# Matches your 3-Class Dataset
 CLASS_NAMES = ["Spaghetti", "Stringing", "Zits"]
 
 default_config = {
@@ -34,7 +35,7 @@ default_config = {
         {"id": 1, "name": "Secondary", "url": "", "enabled": False}
     ],
     "moonraker_url": "http://127.0.0.1:7125",
-    "check_interval": 2000,
+    "check_interval": 500,
     "ai_threshold": 0.50,
     "consecutive_failures": 2,
     "on_failure": "pause",
@@ -47,7 +48,7 @@ if os.path.exists(SETTINGS_FILE):
     try:
         with open(SETTINGS_FILE, 'r') as f:
             loaded = json.load(f)
-            # Migration for old single-cam config
+            # Migration logic
             if "camera_url" in loaded:
                 config["cameras"][0]["url"] = loaded["camera_url"]
             config.update(loaded)
@@ -71,24 +72,139 @@ state = {
 }
 
 # --- AI ENGINE ---
-model = None
+interpreter = None
+input_details = None
+output_details = None
+input_height = 640
+input_width = 640
+input_dtype = np.float32
 
 def load_model():
-    global model
+    global interpreter, input_details, output_details, input_height, input_width, input_dtype
     if not os.path.exists(MODEL_PATH):
-        logging.error(f"CRITICAL: model.pt NOT FOUND at {MODEL_PATH}")
+        logging.error(f"CRITICAL: model.tflite NOT FOUND at {MODEL_PATH}")
         return False
     
     try:
-        logging.info("Loading YOLOv8 Model...")
-        model = YOLO(MODEL_PATH, task='detect')
-        logging.info("YOLOv8 Model Loaded.")
+        interpreter = tflite.Interpreter(model_path=MODEL_PATH)
+        interpreter.allocate_tensors()
+        
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+        
+        input_shape = input_details[0]['shape']
+        input_height = input_shape[1]
+        input_width = input_shape[2]
+        input_dtype = input_details[0]['dtype'] # Auto-detect Float vs Int
+        
+        logging.info(f"Model Loaded. Shape: {input_shape}, Type: {input_dtype}")
         return True
     except Exception as e:
-        logging.error(f"Failed to load YOLO: {e}")
+        logging.error(f"Failed to load TFLite: {e}")
         return False
 
 ai_ready = load_model()
+
+def post_process_yolo(output_data, img_width, img_height, conf_threshold):
+    # Shape: [1, 4+Classes, 8400] -> Transpose to [8400, 4+Classes]
+    if output_data.shape[1] < output_data.shape[2]:
+        output = np.transpose(output_data[0])
+    else:
+        output = output_data[0]
+
+    boxes = []
+    confidences = []
+    class_ids = []
+    
+    # Dimensions: 0=cx, 1=cy, 2=w, 3=h, 4+=Scores
+    scores = output[:, 4:]
+    max_scores = np.max(scores, axis=1)
+    max_indices = np.argmax(scores, axis=1)
+    
+    # Log the max score seen in this entire frame (Diagnostic)
+    # Only log every ~100 frames to avoid spam, or if significant
+    global last_log_time
+    if 'last_log_time' not in globals(): last_log_time = 0
+    
+    highest_raw = np.max(max_scores)
+    if time.time() - last_log_time > 5.0:
+        logging.info(f"DIAGNOSTIC: Max Raw Confidence seen: {highest_raw:.4f}")
+        last_log_time = time.time()
+
+    valid_indices = np.where(max_scores >= conf_threshold)[0]
+    
+    x_factor = img_width / input_width
+    y_factor = img_height / input_height
+
+    for i in valid_indices:
+        score = float(max_scores[i])
+        class_id = int(max_indices[i])
+        row = output[i]
+        
+        cx, cy, w, h = row[0], row[1], row[2], row[3]
+        
+        # Convert normalized (0-1) to pixels (if model is normalized)
+        # Most TFLite exports from Ultralytics are normalized relative to 640x640
+        # We scale them to original image size
+        left = int((cx - w/2) * x_factor)
+        top = int((cy - h/2) * y_factor)
+        width = int(w * x_factor)
+        height = int(h * y_factor)
+        
+        boxes.append([left, top, width, height])
+        confidences.append(score)
+        class_ids.append(class_id)
+
+    # NMS
+    indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, 0.45)
+    
+    final_results = []
+    if len(indices) > 0:
+        for i in indices.flatten():
+            final_results.append({
+                "box": boxes[i],
+                "conf": confidences[i],
+                "class": class_ids[i]
+            })
+            
+    return final_results
+
+def run_inference(image):
+    if not ai_ready or interpreter is None: return 0.0, []
+    
+    try:
+        original_h, original_w = image.shape[:2]
+        resized = cv2.resize(image, (input_width, input_height))
+        
+        # Convert BGR to RGB (Critical for accuracy)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        input_data = np.expand_dims(rgb, axis=0)
+        
+        # AUTO-CONVERT based on model type
+        if input_dtype == np.float32:
+            # Normalize 0-255 -> 0.0-1.0
+            input_data = (input_data.astype(np.float32) / 255.0)
+        elif input_dtype == np.uint8:
+            # Keep as 0-255 integers
+            input_data = input_data.astype(np.uint8)
+        
+        interpreter.set_tensor(input_details[0]['index'], input_data)
+        interpreter.invoke()
+        
+        output_data = interpreter.get_tensor(output_details[0]['index'])
+        
+        user_conf = float(config.get("ai_threshold", 0.5))
+        detections = post_process_yolo(output_data, original_w, original_h, user_conf)
+        
+        if not detections:
+            return 0.0, []
+            
+        top_score = max(d['conf'] for d in detections)
+        return top_score, detections
+        
+    except Exception as e:
+        logging.error(f"Inference Error: {e}")
+        return 0.0, []
 
 # --- ROUTES ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
@@ -139,11 +255,10 @@ def background_monitor():
 
             max_frame_score = 0.0
             
-            # Loop through all cameras
+            # MULTI-CAMERA LOOP
             for cam in config["cameras"]:
                 cam_id = cam["id"]
-                
-                if not cam["enabled"] or not cam["url"]:
+                if not cam["enabled"] or not cam["url"]: 
                     state["cameras"][cam_id]["score"] = 0.0
                     continue
 
@@ -158,49 +273,35 @@ def background_monitor():
                             state["cameras"][cam_id]["score"] = 0.0
                             continue
                         
-                        # AI INFERENCE
-                        cam_high_score = 0.0
-                        if model:
-                            user_conf = float(config.get("ai_threshold", 0.5))
-                            results = model(img, conf=user_conf, verbose=False)
-                            result = results[0]
+                        # INFERENCE
+                        score, detections = 0.0, []
+                        if ai_ready:
+                            score, detections = run_inference(img)
+                        
+                        # Draw
+                        debug_img = img.copy()
+                        for d in detections:
+                            x, y, w, h = d['box']
+                            cls_id = d['class']
+                            label = CLASS_NAMES[cls_id] if cls_id < len(CLASS_NAMES) else "Failure"
                             
-                            # Manual Box Drawing
-                            debug_img = img.copy()
+                            # Box
+                            cv2.rectangle(debug_img, (x, y), (x+w, y+h), (0, 0, 255), 2)
                             
-                            if len(result.boxes) > 0:
-                                for box in result.boxes:
-                                    coords = box.xyxy[0].cpu().numpy().astype(int)
-                                    conf = float(box.conf[0])
-                                    cls_id = int(box.cls[0])
-                                    
-                                    if conf > cam_high_score: cam_high_score = conf
-                                    
-                                    label = "Failure"
-                                    if cls_id < len(CLASS_NAMES): label = CLASS_NAMES[cls_id]
-                                    
-                                    x1, y1, x2, y2 = coords
-                                    h_img, w_img = debug_img.shape[:2]
-                                    x1 = max(0, min(x1, w_img)); x2 = max(0, min(x2, w_img))
-                                    y1 = max(0, min(y1, h_img)); y2 = max(0, min(y2, h_img))
-                                    
-                                    cv2.rectangle(debug_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                                    text = f"{label} {int(conf*100)}%"
-                                    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                                    
-                                    text_y = y1 + th + 5 if y1 < 20 else y1 - 5
-                                    cv2.rectangle(debug_img, (x1, text_y - th - 2), (x1 + tw, text_y + 2), (0, 0, 255), -1)
-                                    cv2.putText(debug_img, text, (x1, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                            # Label
+                            text = f"{label} {int(d['conf']*100)}%"
+                            (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                            if y < 20: text_y = y + th + 5
+                            else: text_y = y - 5
+                            cv2.rectangle(debug_img, (x, text_y - th - 2), (x + tw, text_y + 2), (0, 0, 255), -1)
+                            cv2.putText(debug_img, text, (x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                             
-                            state["cameras"][cam_id]["frame"] = debug_img
-                            state["cameras"][cam_id]["score"] = cam_high_score
-                            
-                            if cam_high_score > max_frame_score:
-                                max_frame_score = cam_high_score
-
+                        state["cameras"][cam_id]["frame"] = debug_img
+                        state["cameras"][cam_id]["score"] = score
+                        if score > max_frame_score: max_frame_score = score
                 except Exception: pass
 
-            # Update Global Status
+            # GLOBAL LOGIC
             if not should_run:
                 state["status"] = "idle"
                 state["failure_count"] = 0
@@ -247,12 +348,10 @@ def settings():
     return jsonify(config)
 @app.route('/api/status', methods=['GET'])
 def get_status():
-    # Get max score from any camera
-    s1 = state["cameras"][0]["score"]
-    s2 = state["cameras"][1]["score"]
+    max_score = max(state["cameras"][0]["score"], state["cameras"][1]["score"])
     return jsonify({
         "status": state["status"],
-        "score": max(s1, s2),
+        "score": max_score,
         "failures": state["failure_count"],
         "max_retries": config["consecutive_failures"]
     })
@@ -260,7 +359,7 @@ def get_status():
 def get_frame(cam_id):
     if cam_id not in state["cameras"] or state["cameras"][cam_id]["frame"] is None:
         blank = np.zeros((360, 640, 3), np.uint8)
-        cv2.putText(blank, "NO SIGNAL / DISABLED", (50, 180), cv2.FONT_HERSHEY_SIMPLEX, 1, (100,100,100), 2)
+        cv2.putText(blank, "NO SIGNAL", (50, 180), cv2.FONT_HERSHEY_SIMPLEX, 1, (100,100,100), 2)
         _, buffer = cv2.imencode('.jpg', blank)
         return Response(buffer.tobytes(), mimetype='image/jpeg')
     _, buffer = cv2.imencode('.jpg', state["cameras"][cam_id]["frame"])
