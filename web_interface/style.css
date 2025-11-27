@@ -48,6 +48,16 @@ h2 { margin: 0; font-weight: 600; color: #fff; }
     flex-wrap: wrap;
 }
 
+/* SINGLE CAMERA MODE (Centers the camera) */
+.camera-grid.single-mode {
+    justify-content: center;
+}
+
+.camera-grid.single-mode .camera-card {
+    max-width: 800px; /* Prevent it from stretching too wide */
+    flex: 0 0 100%; /* Force full width within max-width */
+}
+
 .camera-card {
     flex: 1;
     min-width: 300px;
@@ -56,6 +66,10 @@ h2 { margin: 0; font-weight: 600; color: #fff; }
     border-radius: 6px;
     border: 1px solid #333;
     position: relative;
+}
+
+.camera-card.hidden {
+    display: none !important;
 }
 
 .cam-header h3 {
@@ -219,7 +233,6 @@ select {
 .icon-btn { background: transparent; color: #999; border: none; font-size: 1.5rem; cursor: pointer; }
 .icon-btn:hover { color: #fff; }
 
-/* --- HELP TEXT --- */
 .help-text {
     font-size: 0.8rem; color: #888; margin-top: -10px; margin-bottom: 15px;
     font-style: italic; background-color: #222; padding: 8px; border-radius: 4px;
