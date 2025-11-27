@@ -12,7 +12,7 @@ from flask import Flask, jsonify, request, Response, send_from_directory
 log = logging.getLogger('werkzeug')
 log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: DUAL THRESHOLD TFLITE <<<")
+logging.info(">>> STARTING PLUGIN: PERCENTAGE UI UPDATE <<<")
 
 # Import TFLite Runtime
 try:
@@ -34,13 +34,12 @@ default_config = {
         {"id": 1, "name": "Secondary", "url": "", "enabled": False}
     ],
     "moonraker_url": "http://127.0.0.1:7125",
-    "check_interval": 500,
-    "warn_threshold": 0.30,     # Visual warning only
-    "ai_threshold": 0.50,       # Actual Failure Trigger
+    "check_interval": 500,      # Used for both AI loop AND UI Refresh now
+    "warn_threshold": 0.30,
+    "ai_threshold": 0.50,
     "consecutive_failures": 2,
     "on_failure": "pause",
-    "aspect_ratio": "16:9",
-    "preview_refresh_rate": 500
+    "aspect_ratio": "16:9"
 }
 
 config = default_config.copy()
@@ -105,7 +104,6 @@ def load_model():
 ai_ready = load_model()
 
 def post_process_yolo(output_data, img_width, img_height, conf_threshold):
-    # Transpose [1, 4+Nc, 8400] -> [8400, 4+Nc]
     if output_data.shape[1] < output_data.shape[2]:
         output = np.transpose(output_data[0])
     else:
@@ -115,7 +113,17 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
     confidences = []
     class_ids = []
     
-    # Get scores
+    # Auto-detect scale
+    sample_coords = output[:, :4].flatten()
+    is_normalized = np.max(sample_coords) <= 1.5 
+    
+    if is_normalized:
+        x_factor = img_width
+        y_factor = img_height
+    else:
+        x_factor = img_width / input_width
+        y_factor = img_height / input_height
+
     scores = output[:, 4:]
     max_scores = np.max(scores, axis=1)
     max_indices = np.argmax(scores, axis=1)
@@ -127,14 +135,17 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
         class_id = int(max_indices[i])
         row = output[i]
         
-        # Normalize coordinates (0.0 - 1.0)
         cx, cy, w, h = row[0], row[1], row[2], row[3]
         
-        # Scale to Pixels
-        left = int((cx - w/2) * img_width)
-        top = int((cy - h/2) * img_height)
-        width = int(w * img_width)
-        height = int(h * img_height)
+        left = int((cx - w/2) * x_factor)
+        top = int((cy - h/2) * y_factor)
+        width = int(w * x_factor)
+        height = int(h * y_factor)
+        
+        left = max(0, left)
+        top = max(0, top)
+        width = min(width, img_width - left)
+        height = min(height, img_height - top)
         
         boxes.append([left, top, width, height])
         confidences.append(score)
@@ -172,7 +183,6 @@ def run_inference(image):
         
         output_data = interpreter.get_tensor(output_details[0]['index'])
         
-        # Use WARNING threshold for detection (to show yellow boxes)
         user_conf = float(config.get("warn_threshold", 0.3))
         detections = post_process_yolo(output_data, original_w, original_h, user_conf)
         
@@ -231,7 +241,6 @@ def background_monitor():
 
             should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
-            # Loop Cameras
             max_frame_score = 0.0
             
             for cam in config["cameras"]:
@@ -253,7 +262,6 @@ def background_monitor():
                         
                         if ai_ready:
                             score, detections = run_inference(img)
-                            
                             debug_img = img.copy()
                             trigger_thresh = float(config.get("ai_threshold", 0.5))
 
@@ -263,15 +271,13 @@ def background_monitor():
                                 conf = d['conf']
                                 label = CLASS_NAMES[cls_id] if cls_id < len(CLASS_NAMES) else "Failure"
                                 
-                                # --- COLOR LOGIC ---
                                 if conf >= trigger_thresh:
-                                    box_color = (0, 0, 255) # Red for Failure
+                                    box_color = (0, 0, 255) 
                                     text_color = (255, 255, 255)
                                 else:
-                                    box_color = (0, 255, 255) # Yellow for Warning
+                                    box_color = (0, 255, 255) 
                                     text_color = (0, 0, 0)
 
-                                # --- DRAWING FIX ---
                                 h_img, w_img = debug_img.shape[:2]
                                 x = max(0, min(x, w_img))
                                 y = max(0, min(y, h_img))
@@ -288,13 +294,10 @@ def background_monitor():
                             
                             state["cameras"][cam_id]["frame"] = debug_img
                             state["cameras"][cam_id]["score"] = score
-                            
-                            if score > max_frame_score: 
-                                max_frame_score = score
+                            if score > max_frame_score: max_frame_score = score
 
                 except Exception: pass
 
-            # Global Logic
             if not should_run:
                 state["status"] = "idle"
                 state["failure_count"] = 0
@@ -306,19 +309,15 @@ def background_monitor():
             max_retries = int(config["consecutive_failures"])
             threshold = float(config.get("ai_threshold", 0.5))
             
-            # Only trigger failure if score > Trigger Threshold
             if max_frame_score > threshold:
                 if state["failure_count"] < max_retries:
                     state["failure_count"] += 1
-                
                 logging.info(f"ALERT: Failure {max_frame_score:.2f} | Count: {state['failure_count']}")
-                
                 if state["failure_count"] >= max_retries:
                     state["status"] = "failure_detected"
                     trigger_printer_action(reason="AI Detection")
             else:
-                if state["failure_count"] > 0:
-                    state["failure_count"] -= 1
+                if state["failure_count"] > 0: state["failure_count"] -= 1
 
         except Exception as e:
             logging.error(f"Loop Error: {e}")
@@ -328,7 +327,6 @@ def background_monitor():
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
-# Routes
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
 @app.route('/<path:path>')
