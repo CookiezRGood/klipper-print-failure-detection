@@ -14,7 +14,6 @@
         </header>
 
         <div class="main-content">
-            
             <div class="camera-grid">
                 <div class="camera-card">
                     <div class="cam-header"><h3>Primary Camera</h3></div>
@@ -71,31 +70,65 @@
         </div>
         <div class="modal-body">
             <div class="setting-group">
-                <h4>Camera 1</h4>
-                <div class="setting-row"><label>URL:</label><input type="text" id="cam1_url_input"></div>
-                <div class="setting-row"><label>Enable:</label><input type="checkbox" id="cam1_enable" style="width:auto;"></div>
+                <h4>Camera Setup</h4>
+                <div class="setting-row">
+                    <label>Cam 1 URL:</label>
+                    <input type="text" id="cam1_url_input">
+                </div>
+                <div class="setting-row">
+                    <label>Cam 2 URL:</label>
+                    <input type="text" id="cam2_url_input">
+                </div>
+                <div class="setting-row">
+                    <label>Aspect Ratio:</label>
+                    <select id="aspect_ratio">
+                        <option value="16:9">16:9 (Widescreen)</option>
+                        <option value="4:3">4:3 (Standard)</option>
+                    </select>
+                </div>
+                <div class="setting-row">
+                    <label>UI Refresh (ms):</label>
+                    <input type="number" id="preview_refresh_rate" step="50" min="100">
+                </div>
             </div>
-            <div class="setting-group">
-                <h4>Camera 2</h4>
-                <div class="setting-row"><label>URL:</label><input type="text" id="cam2_url_input"></div>
-                <div class="setting-row"><label>Enable:</label><input type="checkbox" id="cam2_enable" style="width:auto;"></div>
-            </div>
+
             <div class="setting-group">
                 <h4>Detection Logic</h4>
-                <div class="setting-row"><label>Check Interval (ms):</label><input type="number" id="check_interval" step="100"></div>
-                <div class="setting-row"><label>Failure Threshold (0.0-1.0):</label><input type="number" id="ai_threshold" step="0.05" max="1"></div>
-                <div class="setting-row"><label>Moonraker URL:</label><input type="text" id="moonraker_url"></div>
+                <div class="setting-row">
+                    <label>Check Interval (ms):</label>
+                    <input type="number" id="check_interval" step="100">
+                </div>
+                <div class="setting-row">
+                    <label>Failure Threshold (0.0 - 1.0):</label>
+                    <input type="number" id="ai_threshold" step="0.05" max="1">
+                </div>
+                <div class="setting-row">
+                    <label>Moonraker URL:</label>
+                    <input type="text" id="moonraker_url" placeholder="http://127.0.0.1:7125">
+                </div>
             </div>
+
             <div class="setting-group">
                 <h4>Actions</h4>
-                <div class="setting-row"><label>Max Retries:</label><input type="number" id="consecutive_failures"></div>
-                <div class="setting-row"><label>On Failure:</label><select id="on_failure"><option value="nothing">Warning Only</option><option value="pause">Pause Print</option><option value="cancel">Cancel Print</option></select></div>
+                <div class="setting-row">
+                    <label>Max Retries:</label>
+                    <input type="number" id="consecutive_failures" step="1">
+                </div>
+                <div class="setting-row">
+                    <label>On Failure:</label>
+                    <select id="on_failure">
+                        <option value="nothing">Warning Only</option>
+                        <option value="pause">Pause Print</option>
+                        <option value="cancel">Cancel Print</option>
+                    </select>
+                </div>
             </div>
         </div>
         <div class="modal-footer">
             <button id="save-settings-btn" class="primary-btn">Save Configuration</button>
         </div>
     </dialog>
+
     <script src="script.js"></script>
 </body>
 </html>
