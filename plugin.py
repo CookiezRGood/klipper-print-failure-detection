@@ -308,6 +308,7 @@ def background_monitor():
         except Exception as e:
             logging.error(f"Loop Error: {e}")
         
+        # Use check_interval for both detection and UI refresh
         time.sleep(float(config["check_interval"]) / 1000.0)
 
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
