@@ -15,6 +15,7 @@
 
         <div class="main-content">
             <div class="camera-grid">
+                <!-- CAMERA 1 -->
                 <div class="camera-card">
                     <div class="cam-header"><h3>Primary Camera</h3></div>
                     <div class="camera-viewport" id="cam1-container">
@@ -30,6 +31,7 @@
                     </div>
                 </div>
 
+                <!-- CAMERA 2 -->
                 <div class="camera-card">
                     <div class="cam-header"><h3>Secondary Camera</h3></div>
                     <div class="camera-viewport" id="cam2-container">
@@ -86,35 +88,32 @@
                         <option value="4:3">4:3 (Standard)</option>
                     </select>
                 </div>
-                <div class="setting-row">
-                    <label>UI Refresh (ms):</label>
-                    <input type="number" id="preview_refresh_rate" step="50" min="100">
-                </div>
-                <div class="setting-row">
-                    <label>Moonraker URL:</label>
-                    <input type="text" id="moonraker_url" placeholder="http://127.0.0.1:7125">
-                </div>
             </div>
 
             <div class="setting-group">
                 <h4>Detection Logic</h4>
                 <div class="setting-row">
                     <label>Check Interval (ms):</label>
-                    <input type="number" id="check_interval" step="100">
+                    <input type="number" id="check_interval" step="100" min="100">
                 </div>
+                <p class="help-text">Speed of AI checks. Also controls UI refresh rate.</p>
                 
                 <div class="setting-row">
-                    <label>Detection Threshold (Display):</label>
-                    <input type="number" id="warn_threshold" step="0.05" max="1">
+                    <label>Detection Threshold (%):</label>
+                    <input type="number" id="warn_threshold" step="5" min="0" max="100">
                 </div>
-                <p class="help-text">Shows yellow warning box if detection is above this (0.0 - 1.0).</p>
+                <p class="help-text">Shows yellow warning box if confidence > this %.</p>
 
                 <div class="setting-row">
-                    <label>Trigger Threshold (Action):</label>
-                    <input type="number" id="ai_threshold" step="0.05" max="1">
+                    <label>Trigger Threshold (%):</label>
+                    <input type="number" id="ai_threshold" step="5" min="0" max="100">
                 </div>
-                <p class="help-text">Triggers 'On Failure' action if above this (0.0 - 1.0).</p>
+                <p class="help-text">Triggers failure action if confidence > this %.</p>
 
+                <div class="setting-row">
+                    <label>Moonraker URL:</label>
+                    <input type="text" id="moonraker_url" placeholder="http://127.0.0.1:7125">
+                </div>
             </div>
 
             <div class="setting-group">
