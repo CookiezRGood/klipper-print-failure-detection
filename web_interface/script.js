@@ -17,8 +17,10 @@ const cam2Toggle = document.getElementById('cam2-toggle');
 const cam1View = document.getElementById('cam1-container');
 const cam2View = document.getElementById('cam2-container');
 
+// --- IMAGE REFRESH LOOP (Synced to Check Interval) ---
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
+    // Cap at 100ms minimum for sanity
     const safeRate = (rate && rate >= 100) ? rate : 500;
     
     imageInterval = setInterval(() => {
@@ -96,17 +98,15 @@ async function updateStatus() {
         retryText.innerText = `${data.failures}/${data.max_retries}`;
         confidenceBar.style.width = `${failPercent}%`;
 
-        // DUAL THRESHOLD VISUALS
-        // We use the loaded settings to color the bar
         const warnT = (currentSettings.warn_threshold || 0.3) * 100;
         const failT = (currentSettings.ai_threshold || 0.6) * 100;
 
         if (data.failures > 0 || failPercent >= failT) {
-            confidenceBar.style.background = '#FF5722'; // Red/Orange
+            confidenceBar.style.background = '#FF5722'; 
         } else if (failPercent >= warnT) {
-            confidenceBar.style.background = '#FFC107'; // Yellow
+            confidenceBar.style.background = '#FFC107'; 
         } else {
-            confidenceBar.style.background = '#4CAF50'; // Green
+            confidenceBar.style.background = '#4CAF50'; 
         }
 
     } catch (e) { console.log("Status error", e); }
@@ -130,29 +130,29 @@ async function loadSettings() {
         
         const cam1 = currentSettings.cameras[0];
         const cam2 = currentSettings.cameras[1];
-        
         toggleCamera(0, cam1.enabled);
         toggleCamera(1, cam2.enabled);
 
         document.getElementById('cam1_url_input').value = cam1.url;
         document.getElementById('cam2_url_input').value = cam2.url;
         
-        document.getElementById('moonraker_url').value = currentSettings.moonraker_url || "http://127.0.0.1:7125";
+        document.getElementById('moonraker_url').value = currentSettings.moonraker_url || "[http://127.0.0.1:7125](http://127.0.0.1:7125)";
         document.getElementById('check_interval').value = currentSettings.check_interval;
         
-        document.getElementById('warn_threshold').value = currentSettings.warn_threshold || 0.30;
-        document.getElementById('ai_threshold').value = currentSettings.ai_threshold || 0.60;
+        // CONVERT 0.3 -> 30
+        document.getElementById('warn_threshold').value = Math.round((currentSettings.warn_threshold || 0.30) * 100);
+        document.getElementById('ai_threshold').value = Math.round((currentSettings.ai_threshold || 0.50) * 100);
         
         document.getElementById('consecutive_failures').value = currentSettings.consecutive_failures;
         document.getElementById('on_failure').value = currentSettings.on_failure || "nothing";
         document.getElementById('aspect_ratio').value = currentSettings.aspect_ratio || "16:9";
-        document.getElementById('preview_refresh_rate').value = currentSettings.preview_refresh_rate || 500;
 
         const ratio = (currentSettings.aspect_ratio || "16:9").replace(':', '/');
         cam1View.style.aspectRatio = ratio;
         cam2View.style.aspectRatio = ratio;
         
-        startImageLoop(currentSettings.preview_refresh_rate);
+        // Use Check Interval for Refresh Rate
+        startImageLoop(currentSettings.check_interval);
     } catch (e) { console.error(e); }
 }
 
@@ -164,21 +164,21 @@ document.getElementById('open-settings-btn').addEventListener('click', () => {
 document.getElementById('close-modal-x').addEventListener('click', () => settingsModal.close());
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
-    const newRate = parseInt(document.getElementById('preview_refresh_rate').value);
+    // Grab Check Interval for both Backend and Frontend
+    const newInterval = parseInt(document.getElementById('check_interval').value);
     
     currentSettings.cameras[0].url = document.getElementById('cam1_url_input').value;
     currentSettings.cameras[1].url = document.getElementById('cam2_url_input').value;
-    
     currentSettings.moonraker_url = document.getElementById('moonraker_url').value;
-    currentSettings.check_interval = parseInt(document.getElementById('check_interval').value);
+    currentSettings.check_interval = newInterval;
     
-    currentSettings.warn_threshold = parseFloat(document.getElementById('warn_threshold').value);
-    currentSettings.ai_threshold = parseFloat(document.getElementById('ai_threshold').value);
+    // CONVERT 30 -> 0.3
+    currentSettings.warn_threshold = parseInt(document.getElementById('warn_threshold').value) / 100.0;
+    currentSettings.ai_threshold = parseInt(document.getElementById('ai_threshold').value) / 100.0;
     
     currentSettings.consecutive_failures = parseInt(document.getElementById('consecutive_failures').value);
     currentSettings.on_failure = document.getElementById('on_failure').value;
     currentSettings.aspect_ratio = document.getElementById('aspect_ratio').value;
-    currentSettings.preview_refresh_rate = newRate;
 
     await fetch('/api/settings', {
         method: 'POST',
@@ -189,7 +189,9 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     const ratio = currentSettings.aspect_ratio.replace(':', '/');
     cam1View.style.aspectRatio = ratio;
     cam2View.style.aspectRatio = ratio;
-    startImageLoop(newRate); 
+    
+    // Sync Refresh with Check Interval
+    startImageLoop(newInterval); 
     
     alert("Configuration Saved!");
     settingsModal.close();
