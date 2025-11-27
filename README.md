@@ -42,6 +42,8 @@ Clone this repository to your printer and install:
    sudo bash install.sh
    ```
 
+**Note**: since this is an AI model running image processing locally on your 3D printer, it may be resource intensive. I optimized it as best I could for my setup so it may or may not work for you depending on how good of an MCU you have. I have a Raspberry Pi CM4 with 8GB memory and 32GB eMMC storage. While running, this plugin puts my CPU usage to around 40-50% so it should be small enough to not overload most machines.
+
 ## Post Installation Steps
 
 - Open your browser and go to http://YOUR-IP:7126 to see the dashboard
