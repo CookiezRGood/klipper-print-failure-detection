@@ -1,14 +1,21 @@
-# Print Failure Detection Plugin for Klipper
-# IN PROGRESS, DO NOT DOWNLOAD
+# Print Failure Detection Plugin for Klipper/Mainsail
 
-This plugin uses image comparison (SSIM) to detect print failures. It is integrated with Mainsail for real-time monitoring of print status. This plugin works with a camera pointed at the print bed and uses dynamic motion-based masking to detect toolhead movement during printing.
+## Local AI-Powered Failure Detection
+
+This plugin uses advanced AI (TensorFlow Lite) to detect print failures in real-time. This plugin utilizes a computer vision model trained to recognize specific failure states like spaghetti, stringing, and zits.
+
+It runs locally on your Raspberry Pi (or other Klipper host), integrates directly with Moonraker to pause or cancel failed prints, and provides a dedicated dashboard for monitoring up to two cameras simultaneously.
 
 ## Features
-- Detects print failures based on image comparison (SSIM)
-- Real-time camera preview in Mainsail
-- Adjustable thresholds for SSIM, stillness, and layer height
-- Web-based interface for adjusting settings
-- Debug overlays for toolhead masking
+
+- **AI Failure Detection**: Uses a .tflite model (YOLOv8 Nano architecture) to identify failures with high accuracy.
+- **Multi-Camera Support**: Monitor and detect failures on up to 2 cameras at once.
+- **Dual Thresholds**:
+   - **Detection Threshold**: Visually highlights potential issues (Yellow box) without stopping the print.
+   - **Trigger Threshold**: Automatically pauses or cancels the print when confidence is high (Red box) after a set number of retrys.
+- **Smart Idle Mode**: Automatically stops processing when the printer is idle to save CPU resources.
+- **Real-time Dashboard**: View live feeds with bounding box overlays showing exactly what the AI detected.
+- **Configurable Actions**: Choose to Warn, Pause, or Cancel print upon failure.
 
 ## Installation
 
@@ -23,8 +30,8 @@ Clone this repository to your printer and install:
 ## Post Installation Steps
 
 - Open your browser and go to http://YOUR-IP:7126 to see the dashboard
-- Open the settings and input your printer camera ip (Default uses MJPEG style: /webcam/?action=snapshot)
-- Adjust any other settings to your preference with testing to make sure it works well for your setup (works best with a static camera with no moving background)
+- Open the settings and input your printer camera ip (Default uses MJPEG style (.../webcam/?action=snapshot)
+- Adjust any other settings to your preference with testing to make sure it works well for your setup (mainly detection/failure threshold values)
 
 
 ## Automatic Updates
