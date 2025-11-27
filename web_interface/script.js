@@ -1,6 +1,7 @@
 let imageInterval; 
 let currentSettings = {};
 
+// DOM Elements
 const statusBadge = document.getElementById('status-indicator');
 const ssimText = document.getElementById('ssim-val');
 const retryText = document.getElementById('retry-val');
@@ -8,6 +9,7 @@ const confidenceBar = document.getElementById('confidence-bar');
 const forceStartBtn = document.getElementById('force-start-btn');
 const settingsModal = document.getElementById('settings-modal');
 
+// Camera Elements
 const cam1Img = document.getElementById('cam1-img');
 const cam2Img = document.getElementById('cam2-img');
 const cam1Card = cam1Img.closest('.camera-card');
@@ -17,28 +19,36 @@ const cam2Toggle = document.getElementById('cam2-toggle');
 const cam1View = document.getElementById('cam1-container');
 const cam2View = document.getElementById('cam2-container');
 
+// --- IMAGE REFRESH LOOP ---
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
     const safeRate = (rate && rate >= 100) ? rate : 500;
     
     imageInterval = setInterval(() => {
         const timestamp = new Date().getTime();
+        
         if (!cam1Card.classList.contains('disabled')) {
             cam1Img.src = `/api/frame/0?t=${timestamp}`;
         }
+        
         if (!cam2Card.classList.contains('disabled')) {
             cam2Img.src = `/api/frame/1?t=${timestamp}`;
         }
     }, safeRate);
 }
 
+// --- TOGGLE HANDLERS ---
 async function toggleCamera(id, isEnabled) {
     const card = id === 0 ? cam1Card : cam2Card;
     const toggle = id === 0 ? cam1Toggle : cam2Toggle;
     
     toggle.checked = isEnabled;
-    if (isEnabled) card.classList.remove('disabled');
-    else card.classList.add('disabled');
+    
+    if (isEnabled) {
+        card.classList.remove('disabled');
+    } else {
+        card.classList.add('disabled');
+    }
     
     if (currentSettings.cameras) {
         currentSettings.cameras[id].enabled = isEnabled;
@@ -55,6 +65,7 @@ async function toggleCamera(id, isEnabled) {
 cam1Toggle.addEventListener('change', (e) => toggleCamera(0, e.target.checked));
 cam2Toggle.addEventListener('change', (e) => toggleCamera(1, e.target.checked));
 
+// --- BUTTON STATE ---
 function setButtonState(mode) {
     forceStartBtn.classList.remove('btn-success', 'btn-danger', 'btn-primary');
     if (mode === 'start') {
@@ -67,16 +78,10 @@ function setButtonState(mode) {
         forceStartBtn.classList.add('btn-danger'); 
         forceStartBtn.dataset.action = "stop";
         forceStartBtn.style.display = 'inline-block';
-    } else if (mode === 'force') {
-        forceStartBtn.innerText = "▶ Force Start";
-        forceStartBtn.classList.add('btn-primary'); 
-        forceStartBtn.dataset.action = "start";
-        forceStartBtn.style.display = 'inline-block';
-    } else if (mode === 'hide') {
-        forceStartBtn.style.display = 'none'; 
     }
 }
 
+// --- STATUS POLLING ---
 async function updateStatus() {
     try {
         const res = await fetch('/api/status');
@@ -86,22 +91,16 @@ async function updateStatus() {
         statusBadge.innerText = statusText;
         
         if (data.status === 'failure_detected' || data.status === 'error') {
-            statusBadge.style.backgroundColor = '#F44336'; 
+            statusBadge.style.backgroundColor = '#F44336'; // Red
             setButtonState('stop');
         } else if (data.status === 'monitoring') {
-            statusBadge.style.backgroundColor = '#4CAF50'; 
+            statusBadge.style.backgroundColor = '#4CAF50'; // Green
             setButtonState('stop');
         } else if (data.status === 'idle') {
-            statusBadge.style.backgroundColor = '#555555'; 
+            statusBadge.style.backgroundColor = '#555555'; // Grey
             setButtonState('start');
-        } else if (data.status === 'awaiting_macro') {
-            statusBadge.style.backgroundColor = '#2196F3'; 
-            setButtonState('force');
-        } else if (data.status === 'connection_error') {
-            statusBadge.style.backgroundColor = '#9E9E9E'; 
-            setButtonState('hide');
         } else {
-            statusBadge.style.backgroundColor = '#f39c12'; 
+            statusBadge.style.backgroundColor = '#f39c12'; // Orange
         }
 
         const failPercent = Math.round(data.score * 100);
@@ -109,14 +108,19 @@ async function updateStatus() {
         retryText.innerText = `${data.failures}/${data.max_retries}`;
         confidenceBar.style.width = `${failPercent}%`;
 
-        if (data.failures > 0) confidenceBar.style.background = '#FF5722'; 
-        else if (failPercent > 50) confidenceBar.style.background = '#FFC107'; 
-        else confidenceBar.style.background = '#4CAF50';
+        if (data.failures > 0) {
+            confidenceBar.style.background = '#FF5722';
+        } else if (failPercent > 50) {
+            confidenceBar.style.background = '#FFC107';
+        } else {
+            confidenceBar.style.background = '#4CAF50';
+        }
 
     } catch (e) { console.log("Status error", e); }
 }
 setInterval(updateStatus, 1000);
 
+// --- BUTTON CLICK ---
 forceStartBtn.addEventListener('click', async () => {
     const action = forceStartBtn.dataset.action;
     const method = { method: 'POST' };
@@ -127,17 +131,20 @@ forceStartBtn.addEventListener('click', async () => {
     } catch (e) {}
 });
 
+// --- SETTINGS LOADING ---
 async function loadSettings() {
     try {
         const res = await fetch('/api/settings');
         currentSettings = await res.json();
         
+        // Init Cameras
         const cam1 = currentSettings.cameras[0];
         const cam2 = currentSettings.cameras[1];
         
         toggleCamera(0, cam1.enabled);
         toggleCamera(1, cam2.enabled);
-
+        
+        // Populate Inputs
         document.getElementById('cam1_url_input').value = cam1.url;
         document.getElementById('cam2_url_input').value = cam2.url;
         
@@ -154,9 +161,7 @@ async function loadSettings() {
         cam2View.style.aspectRatio = ratio;
         
         startImageLoop(currentSettings.preview_refresh_rate);
-    } catch (e) {
-        console.error("Settings Load Fail:", e);
-    }
+    } catch (e) { console.error(e); }
 }
 
 document.getElementById('open-settings-btn').addEventListener('click', () => {
@@ -170,8 +175,6 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     const newRate = parseInt(document.getElementById('preview_refresh_rate').value);
     
     currentSettings.cameras[0].url = document.getElementById('cam1_url_input').value;
-    // Enabled state is handled by toggles, don't overwrite from modal (removed inputs)
-    
     currentSettings.cameras[1].url = document.getElementById('cam2_url_input').value;
     
     currentSettings.moonraker_url = document.getElementById('moonraker_url').value;
