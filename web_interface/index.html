@@ -14,13 +14,47 @@
         </header>
 
         <div class="main-content">
-            <div class="camera-section">
-                <div class="camera-header">
-                    <h3>Live Monitor</h3>
+            
+            <div class="camera-grid">
+                
+                <div class="camera-card">
+                    <div class="cam-header">
+                        <h3>Primary Camera</h3>
                     </div>
-                <div id="camera-container">
-                    <img id="live-image" class="live-feed" alt="Waiting..." />
+                    <div class="camera-viewport" id="cam1-container">
+                        <img id="cam1-img" class="live-feed" alt="" />
+                        <div class="disabled-overlay" id="cam1-overlay">
+                            <span>DISABLED</span>
+                        </div>
+                    </div>
+                    <div class="cam-controls">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="cam1-toggle">
+                            <span class="slider"></span>
+                            <span class="label-text">Active</span>
+                        </label>
+                    </div>
                 </div>
+
+                <div class="camera-card">
+                    <div class="cam-header">
+                        <h3>Secondary Camera</h3>
+                    </div>
+                    <div class="camera-viewport" id="cam2-container">
+                        <img id="cam2-img" class="live-feed" alt="" />
+                        <div class="disabled-overlay" id="cam2-overlay">
+                            <span>DISABLED</span>
+                        </div>
+                    </div>
+                    <div class="cam-controls">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="cam2-toggle">
+                            <span class="slider"></span>
+                            <span class="label-text">Active</span>
+                        </label>
+                    </div>
+                </div>
+
             </div>
 
             <div class="health-section">
@@ -48,10 +82,14 @@
         <div class="modal-body">
             
             <div class="setting-group">
-                <h4>Connections & Camera</h4>
+                <h4>Camera Setup</h4>
                 <div class="setting-row">
-                    <label>Camera URL:</label>
-                    <input type="text" id="camera_url">
+                    <label>Cam 1 URL:</label>
+                    <input type="text" id="cam1_url_input">
+                </div>
+                <div class="setting-row">
+                    <label>Cam 2 URL:</label>
+                    <input type="text" id="cam2_url_input">
                 </div>
                 <div class="setting-row">
                     <label>Aspect Ratio:</label>
@@ -61,33 +99,25 @@
                     </select>
                 </div>
                 <div class="setting-row">
-                    <label>UI Refresh Rate (ms):</label>
+                    <label>UI Refresh (ms):</label>
                     <input type="number" id="preview_refresh_rate" step="50" min="100">
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <h4>Detection Logic</h4>
+                <div class="setting-row">
+                    <label>Check Interval (ms):</label>
+                    <input type="number" id="check_interval" step="100">
+                </div>
+                <div class="setting-row">
+                    <label>Failure Threshold (0.0 - 1.0):</label>
+                    <input type="number" id="ai_threshold" step="0.05" max="1">
                 </div>
                 <div class="setting-row">
                     <label>Moonraker URL:</label>
                     <input type="text" id="moonraker_url" placeholder="http://127.0.0.1:7125">
                 </div>
-            </div>
-
-            <div class="setting-group">
-                <h4>AI Detection Logic</h4>
-                <div class="setting-row">
-                    <label>Check Interval (ms):</label>
-                    <input type="number" id="check_interval" step="100" min="500">
-                </div>
-                <p class="help-text">
-                    How often to run the AI check. Higher values (2000ms+) use less CPU.
-                </p>
-
-                <div class="setting-row">
-                    <label>Failure Threshold (0.0 - 1.0):</label>
-                    <input type="number" id="ai_threshold" step="0.05" max="1">
-                </div>
-                <p class="help-text">
-                    <strong>Higher (0.80+)</strong> = Strict (Needs obvious spaghetti). <br>
-                    <strong>Lower (0.40-)</strong> = Sensitive (May trigger on messy infill).
-                </p>
             </div>
 
             <div class="setting-group">
@@ -99,7 +129,7 @@
                 <div class="setting-row">
                     <label>On Failure:</label>
                     <select id="on_failure">
-                        <option value="nothing">Warning Only (Console)</option>
+                        <option value="nothing">Warning Only</option>
                         <option value="pause">Pause Print</option>
                         <option value="cancel">Cancel Print</option>
                     </select>
