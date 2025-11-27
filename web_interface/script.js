@@ -1,6 +1,7 @@
 let imageInterval; 
 let currentSettings = {};
 
+// DOM Elements
 const statusBadge = document.getElementById('status-indicator');
 const ssimText = document.getElementById('ssim-val');
 const retryText = document.getElementById('retry-val');
@@ -8,6 +9,7 @@ const confidenceBar = document.getElementById('confidence-bar');
 const forceStartBtn = document.getElementById('force-start-btn');
 const settingsModal = document.getElementById('settings-modal');
 
+// Camera Elements
 const cam1Img = document.getElementById('cam1-img');
 const cam2Img = document.getElementById('cam2-img');
 const cam1Card = cam1Img.closest('.camera-card');
@@ -17,21 +19,25 @@ const cam2Toggle = document.getElementById('cam2-toggle');
 const cam1View = document.getElementById('cam1-container');
 const cam2View = document.getElementById('cam2-container');
 
+// --- IMAGE REFRESH LOOP ---
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
     const safeRate = (rate && rate >= 100) ? rate : 500;
     
     imageInterval = setInterval(() => {
         const timestamp = new Date().getTime();
+        
         if (!cam1Card.classList.contains('disabled')) {
             cam1Img.src = `/api/frame/0?t=${timestamp}`;
         }
+        
         if (!cam2Card.classList.contains('disabled')) {
             cam2Img.src = `/api/frame/1?t=${timestamp}`;
         }
     }, safeRate);
 }
 
+// --- TOGGLE HANDLERS ---
 async function toggleCamera(id, isEnabled) {
     const card = id === 0 ? cam1Card : cam2Card;
     const toggle = id === 0 ? cam1Toggle : cam2Toggle;
@@ -44,7 +50,6 @@ async function toggleCamera(id, isEnabled) {
         card.classList.add('disabled');
     }
     
-    // Update Backend
     if (currentSettings.cameras) {
         currentSettings.cameras[id].enabled = isEnabled;
         try {
@@ -53,8 +58,6 @@ async function toggleCamera(id, isEnabled) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(currentSettings)
             });
-            // FORCE UI UPDATE after a tiny delay to allow backend to reset
-            setTimeout(updateStatus, 200);
         } catch (e) {}
     }
 }
@@ -62,6 +65,7 @@ async function toggleCamera(id, isEnabled) {
 cam1Toggle.addEventListener('change', (e) => toggleCamera(0, e.target.checked));
 cam2Toggle.addEventListener('change', (e) => toggleCamera(1, e.target.checked));
 
+// --- BUTTON STATE ---
 function setButtonState(mode) {
     forceStartBtn.classList.remove('btn-success', 'btn-danger', 'btn-primary');
     if (mode === 'start') {
@@ -77,6 +81,7 @@ function setButtonState(mode) {
     }
 }
 
+// --- STATUS POLLING ---
 async function updateStatus() {
     try {
         const res = await fetch('/api/status');
@@ -103,14 +108,19 @@ async function updateStatus() {
         retryText.innerText = `${data.failures}/${data.max_retries}`;
         confidenceBar.style.width = `${failPercent}%`;
 
-        if (data.failures > 0) confidenceBar.style.background = '#FF5722'; 
-        else if (failPercent > 50) confidenceBar.style.background = '#FFC107'; 
-        else confidenceBar.style.background = '#4CAF50';
+        if (data.failures > 0) {
+            confidenceBar.style.background = '#FF5722';
+        } else if (failPercent > 50) {
+            confidenceBar.style.background = '#FFC107';
+        } else {
+            confidenceBar.style.background = '#4CAF50';
+        }
 
     } catch (e) { console.log("Status error", e); }
 }
 setInterval(updateStatus, 1000);
 
+// --- BUTTON CLICK ---
 forceStartBtn.addEventListener('click', async () => {
     const action = forceStartBtn.dataset.action;
     const method = { method: 'POST' };
@@ -121,17 +131,20 @@ forceStartBtn.addEventListener('click', async () => {
     } catch (e) {}
 });
 
+// --- SETTINGS LOADING ---
 async function loadSettings() {
     try {
         const res = await fetch('/api/settings');
         currentSettings = await res.json();
         
+        // Init Cameras
         const cam1 = currentSettings.cameras[0];
         const cam2 = currentSettings.cameras[1];
         
         toggleCamera(0, cam1.enabled);
         toggleCamera(1, cam2.enabled);
-
+        
+        // Populate Inputs
         document.getElementById('cam1_url_input').value = cam1.url;
         document.getElementById('cam2_url_input').value = cam2.url;
         
