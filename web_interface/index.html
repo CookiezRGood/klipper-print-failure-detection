@@ -98,10 +98,19 @@
                     <label>Check Interval (ms):</label>
                     <input type="number" id="check_interval" step="100">
                 </div>
+                
                 <div class="setting-row">
-                    <label>Failure Threshold (0.0 - 1.0):</label>
+                    <label>Detection Threshold (Display):</label>
+                    <input type="number" id="warn_threshold" step="0.05" max="1">
+                </div>
+                <p class="help-text">Shows yellow box/bar if detection is above this (0.0 - 1.0).</p>
+
+                <div class="setting-row">
+                    <label>Trigger Threshold (Action):</label>
                     <input type="number" id="ai_threshold" step="0.05" max="1">
                 </div>
+                <p class="help-text">Stops the printer if detection is above this.</p>
+
                 <div class="setting-row">
                     <label>Moonraker URL:</label>
                     <input type="text" id="moonraker_url" placeholder="http://127.0.0.1:7125">
