@@ -19,6 +19,18 @@ app = Flask(__name__, static_folder='web_interface')
 # Path to the settings file
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
 
+# Initialize the state variable
+state = {
+    "status": "idle",
+    "failure_count": 0,
+    "action_triggered": False,
+    "monitoring_active": False,
+    "cameras": {
+        0: {"frame": None, "score": 0.0},
+        1: {"frame": None, "score": 0.0}
+    }
+}
+
 # Load existing settings if file exists, else use defaults
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
