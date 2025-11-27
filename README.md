@@ -6,6 +6,8 @@ This plugin uses advanced AI (TensorFlow Lite) to detect print failures in real-
 
 It runs locally on your Raspberry Pi (or other Klipper host), integrates directly with Moonraker to pause or cancel failed prints, and provides a dedicated dashboard for monitoring up to two cameras simultaneously.
 
+[AI Training Documentation](documents/AI_Training.md)
+
 ## Features
 
 - **AI Failure Detection**: Uses a .tflite model (YOLOv8 Nano architecture) to identify failures with high accuracy.
