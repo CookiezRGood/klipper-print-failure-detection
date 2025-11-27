@@ -187,19 +187,27 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     currentSettings.aspect_ratio = document.getElementById('aspect_ratio').value;
     currentSettings.preview_refresh_rate = newRate;
 
-    await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentSettings)
-    });
-    
+    // Ensure the settings are being saved via the POST request
+    try {
+        const response = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(currentSettings)
+        });
+        if (response.ok) {
+            alert("Configuration Saved!");
+            settingsModal.close();
+        } else {
+            console.error("Failed to save settings.");
+        }
+    } catch (e) {
+        console.error("Error saving settings:", e);
+    }
+
     const ratio = currentSettings.aspect_ratio.replace(':', '/');
     cam1View.style.aspectRatio = ratio;
     cam2View.style.aspectRatio = ratio;
-    startImageLoop(newRate); 
-    
-    alert("Configuration Saved!");
-    settingsModal.close();
+    startImageLoop(newRate); // Start the image loop after saving
 });
 
 loadSettings();
