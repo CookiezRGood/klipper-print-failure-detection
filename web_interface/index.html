@@ -29,6 +29,12 @@
                             <span class="label-text">Active</span>
                         </label>
                     </div>
+                    <div class="mask-tools">
+                        <p class="help-text">
+                            Click and drag on the camera to add mask zones. Right-click a zone to remove it.
+                        </p>
+                        <button id="cam1-clear-masks" class="secondary-btn">Clear Masks</button>
+                    </div>
                 </div>
 
                 <!-- CAMERA 2 -->
@@ -44,6 +50,12 @@
                             <span class="slider"></span>
                             <span class="label-text">Active</span>
                         </label>
+                    </div>
+                    <div class="mask-tools">
+                        <p class="help-text">
+                            Click and drag on the camera to add mask zones. Right-click a zone to remove it.
+                        </p>
+                        <button id="cam2-clear-masks" class="secondary-btn">Clear Masks</button>
                     </div>
                 </div>
             </div>
@@ -112,7 +124,7 @@
                     <label>Detection Threshold (%):</label>
                     <input type="number" id="warn_threshold" step="5" min="0" max="100">
                 </div>
-                <p class="help-text">Shows yellow warning if detection is above this (0 - 100).</p>
+                <p class="help-text">Shows yellow warning box if detection is above this (0 - 100).</p>
 
                 <div class="setting-row">
                     <label>Trigger Threshold (%):</label>
@@ -121,42 +133,8 @@
                 <p class="help-text">Triggers 'On Failure' action if above this (0 - 100).</p>
 
             </div>
-            
-            <!-- UPDATED MASK SYSTEM -->
-            <div class="setting-group">
-                <h4>Exclusion Mask</h4>
 
-                <div class="setting-row">
-                    <label>Enable Mask:</label>
-                    <input type="checkbox" id="ex_enabled" style="width:auto;">
-                </div>
-
-                <div class="setting-row">
-                    <label>Left (%):</label>
-                    <input type="range" id="ex_left" min="0" max="100" step="1">
-                    <span id="ex_left_val" class="range-val">0%</span>
-                </div>
-
-                <div class="setting-row">
-                    <label>Right (%):</label>
-                    <input type="range" id="ex_right" min="0" max="100" step="1">
-                    <span id="ex_right_val" class="range-val">0%</span>
-                </div>
-
-                <div class="setting-row">
-                    <label>Top (%):</label>
-                    <input type="range" id="ex_top" min="0" max="100" step="1">
-                    <span id="ex_top_val" class="range-val">0%</span>
-                </div>
-
-                <div class="setting-row">
-                    <label>Bottom (%):</label>
-                    <input type="range" id="ex_bottom" min="0" max="100" step="1">
-                    <span id="ex_bottom_val" class="range-val">0%</span>
-                </div>
-
-                <p class="help-text">These sliders define edges of an ignored rectangle. Use “Visualize Mask”.</p>
-            </div>
+            <!-- Exclusion Mask group removed; masking is drag-based per camera -->
 
             <div class="setting-group">
                 <h4>Actions</h4>
@@ -178,7 +156,6 @@
                 </div>
             </div>
         </div>
-
         <div class="modal-footer">
             <button id="save-settings-btn" class="primary-btn">Save Configuration</button>
         </div>
