@@ -314,17 +314,21 @@ def trigger_printer_action(reason="Failure"):
     logging.info(f"Failure confirmed: {reason} | Action = {action}")
 
     try:
-        requests.post(f"{url}/printer/gcode/script",
-            json={"script": f"M118 >>> AI DETECTED {reason.upper()} <<<
-"}})
+        requests.post(
+            f"{url}/printer/gcode/script",
+            json={"script": f"M118 >>> AI DETECTED {reason.upper()} <<<"}
+        )
+
         if action == "pause":
             requests.post(f"{url}/printer/print/pause")
         elif action == "cancel":
             requests.post(f"{url}/printer/print/cancel")
-    except:
+
+    except Exception:
         pass
 
     state["action_triggered"] = True
+
 
 # ================================================================
 #   BACKGROUND MONITOR LOOP
