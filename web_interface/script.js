@@ -342,6 +342,8 @@ async function loadSettings() {
         const ratio = (currentSettings.aspect_ratio || "16:9").replace(':','/');
         cam1View.style.aspectRatio = ratio;
         cam2View.style.aspectRatio = ratio;
+        document.documentElement.style.setProperty("--aspect-ratio", ratio);
+
         
         applyLayout(currentSettings.camera_count || 2);
         startImageLoop(currentSettings.check_interval);
