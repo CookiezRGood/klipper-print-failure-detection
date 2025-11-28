@@ -23,6 +23,15 @@ const cam2View = document.getElementById('cam2-container');
 const cam1ClearBtn = document.getElementById('cam1-clear-masks');
 const cam2ClearBtn = document.getElementById('cam2-clear-masks');
 
+// Disable native image dragging / interaction so containers receive events
+[cam1Img, cam2Img].forEach(img => {
+    if (!img) return;
+    img.draggable = false;
+    img.style.pointerEvents = 'none';
+    img.style.userSelect = 'none';
+    img.style.webkitUserDrag = 'none';
+});
+
 // per-camera mask zones, normalized [0–1]
 const maskZones = {
     0: [],
@@ -198,8 +207,10 @@ function setupMaskDrawing(camId, containerEl) {
     }
 
     containerEl.addEventListener('mousedown', (e) => {
-        // Only left-click to start
+        // Left click starts drag-to-draw
         if (e.button !== 0) return;
+        e.preventDefault();
+
         const { x, y, width, height } = getRelativePos(e);
         if (x < 0 || y < 0 || x > width || y > height) return;
 
@@ -208,6 +219,7 @@ function setupMaskDrawing(camId, containerEl) {
         startY = y;
 
         tempRect = document.createElement('div');
+        tempRect.className = "temp-mask-rect";
         tempRect.style.position = 'absolute';
         tempRect.style.border = '1px solid #ff00ff';
         tempRect.style.backgroundColor = 'rgba(255, 0, 255, 0.2)';
@@ -216,11 +228,14 @@ function setupMaskDrawing(camId, containerEl) {
         tempRect.style.top = `${startY}px`;
         tempRect.style.width = '0px';
         tempRect.style.height = '0px';
+
         containerEl.appendChild(tempRect);
     });
 
     window.addEventListener('mousemove', (e) => {
         if (!isDrawing || !tempRect) return;
+        e.preventDefault();
+
         const { x, y } = getRelativePos(e);
 
         const currX = x;
@@ -238,11 +253,11 @@ function setupMaskDrawing(camId, containerEl) {
 
     window.addEventListener('mouseup', (e) => {
         if (!isDrawing || !tempRect) return;
+        e.preventDefault();
+
         isDrawing = false;
 
-        const { x, y, width, height } = getRelativePos(e);
-        const endX = x;
-        const endY = y;
+        const { x: endX, y: endY, width, height } = getRelativePos(e);
 
         const rectX = Math.min(startX, endX);
         const rectY = Math.min(startY, endY);
@@ -252,7 +267,7 @@ function setupMaskDrawing(camId, containerEl) {
         containerEl.removeChild(tempRect);
         tempRect = null;
 
-        // Ignore tiny drags
+        // Ignore very tiny drags
         if (rectW < 10 || rectH < 10) return;
 
         const normX = rectX / width;
@@ -270,7 +285,7 @@ function setupMaskDrawing(camId, containerEl) {
         syncMasksToServer();
     });
 
-    // Right-click to delete a zone
+    // Right-click delete a zone
     containerEl.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const { x, y, width, height } = getRelativePos(e);
@@ -287,10 +302,10 @@ function setupMaskDrawing(camId, containerEl) {
                 ny <= z.y + z.h
             ) {
                 zones.splice(i, 1);
-                break;
+                syncMasksToServer();
+                return;
             }
         }
-        syncMasksToServer();
     });
 }
 
@@ -347,7 +362,6 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     currentSettings.camera_count = camCount;
     currentSettings.cameras[0].url = document.getElementById('cam1_url_input').value;
     if (camCount === 1) currentSettings.cameras[0].enabled = true;
-    
     currentSettings.cameras[1].url = document.getElementById('cam2_url_input').value;
     currentSettings.moonraker_url = document.getElementById('moonraker_url').value;
     currentSettings.check_interval = newInterval;
