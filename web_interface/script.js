@@ -23,9 +23,12 @@ const cam2View = document.getElementById('cam2-container');
 const cam1ClearBtn = document.getElementById('cam1-clear-masks');
 const cam2ClearBtn = document.getElementById('cam2-clear-masks');
 
-const autoEnableToggle = document.getElementById('auto-enable-toggle');
+const maskZones = {
+    0: [],
+    1: []
+};
 
-// Disable dragging native <img> behavior
+// Disable dragging on images
 [cam1Img, cam2Img].forEach(img => {
     if (!img) return;
     img.draggable = false;
@@ -33,24 +36,18 @@ const autoEnableToggle = document.getElementById('auto-enable-toggle');
     img.style.userSelect = 'none';
 });
 
-const maskZones = {
-    0: [],
-    1: []
-};
-
+// Start image fetch loop
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
-
     const safeRate = (rate && rate >= 100) ? rate : 500;
 
     imageInterval = setInterval(() => {
-        const timestamp = Date.now();
-
+        const t = Date.now();
         if (!cam1Card.classList.contains('disabled')) {
-            cam1Img.src = `/api/frame/0?t=${timestamp}`;
+            cam1Img.src = `/api/frame/0?t=${t}`;
         }
         if (!cam2Card.classList.contains('disabled')) {
-            cam2Img.src = `/api/frame/1?t=${timestamp}`;
+            cam2Img.src = `/api/frame/1?t=${t}`;
         }
     }, safeRate);
 }
@@ -60,7 +57,6 @@ async function toggleCamera(id, isEnabled) {
     const toggle = id === 0 ? cam1Toggle : cam2Toggle;
     
     toggle.checked = isEnabled;
-    
     if (isEnabled) card.classList.remove('disabled');
     else card.classList.add('disabled');
     
@@ -81,15 +77,16 @@ cam2Toggle.addEventListener('change', (e) => toggleCamera(1, e.target.checked));
 
 function setButtonState(mode) {
     forceStartBtn.classList.remove('btn-success', 'btn-danger', 'btn-primary');
-
     if (mode === 'start') {
         forceStartBtn.innerText = "▶ Start Monitoring";
-        forceStartBtn.classList.add('btn-success');
+        forceStartBtn.classList.add('btn-success'); 
         forceStartBtn.dataset.action = "start";
-    } else {
+        forceStartBtn.style.display = 'inline-block';
+    } else if (mode === 'stop') {
         forceStartBtn.innerText = "■ Stop Monitoring";
-        forceStartBtn.classList.add('btn-danger');
+        forceStartBtn.classList.add('btn-danger'); 
         forceStartBtn.dataset.action = "stop";
+        forceStartBtn.style.display = 'inline-block';
     }
 }
 
@@ -101,12 +98,11 @@ async function updateStatus() {
         const statusText = data.status.toUpperCase().replace('_', ' ');
         statusBadge.innerText = statusText;
 
-        // Color
         if (data.status === 'failure_detected') {
-            statusBadge.style.backgroundColor = '#F44336';
+            statusBadge.style.backgroundColor = '#e53935';
             setButtonState('stop');
         } else if (data.status === 'monitoring') {
-            statusBadge.style.backgroundColor = '#4CAF50';
+            statusBadge.style.backgroundColor = '#43a047';
             setButtonState('stop');
         } else if (data.status === 'idle') {
             statusBadge.style.backgroundColor = '#555';
@@ -130,9 +126,8 @@ async function updateStatus() {
         } else {
             confidenceBar.style.background = '#4CAF50';
         }
-
     } catch (err) {
-        console.log("Status error", err);
+        // ignore
     }
 }
 
@@ -140,32 +135,35 @@ setInterval(updateStatus, 1000);
 
 forceStartBtn.addEventListener('click', async () => {
     const action = forceStartBtn.dataset.action;
-
-    if (action === "stop") {
-        await fetch('/api/action/stop', { method: 'POST' });
-    } else {
-        await fetch('/api/action/start', { method: 'POST' });
-    }
-
-    setTimeout(updateStatus, 150);
+    try {
+        if (action === "stop") {
+            await fetch('/api/action/stop', { method: 'POST' });
+        } else {
+            await fetch('/api/action/start', { method: 'POST' });
+        }
+        setTimeout(updateStatus, 100);
+    } catch (e) {}
 });
 
+// --- MASK TOGGLE ---
 maskToggleBtn.addEventListener('click', async () => {
     isMaskVisible = !isMaskVisible;
-
+    
     if (isMaskVisible) {
         maskToggleBtn.style.backgroundColor = "#2196F3";
-        maskToggleBtn.style.color = "#fff";
+        maskToggleBtn.style.color = "white";
     } else {
         maskToggleBtn.style.backgroundColor = "";
         maskToggleBtn.style.color = "";
     }
-
-    await fetch('/api/action/toggle_mask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ show: isMaskVisible })
-    });
+    
+    try {
+        await fetch('/api/action/toggle_mask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ show: isMaskVisible })
+        });
+    } catch (e) {}
 });
 
 function applyLayout(count) {
@@ -175,15 +173,11 @@ function applyLayout(count) {
     if (isSingle) {
         cameraGrid.classList.add('single-mode');
         cam2Card.classList.add('hidden');
-        cam1Card.querySelector('.cam-controls').style.display = 'none';
         cam2Row.style.display = 'none';
-        cam2ClearBtn.parentElement.style.display = 'none';
     } else {
         cameraGrid.classList.remove('single-mode');
         cam2Card.classList.remove('hidden');
-        cam1Card.querySelector('.cam-controls').style.display = 'flex';
         cam2Row.style.display = '';
-        cam2ClearBtn.parentElement.style.display = '';
     }
 }
 
@@ -314,12 +308,13 @@ async function loadSettings() {
         toggleCamera(0, cam1.enabled);
         toggleCamera(1, cam2.enabled);
 
-        document.getElementById('camera_count').value = currentSettings.camera_count || 2;
-        document.getElementById('cam1_url_input').value = cam1.url;
-        document.getElementById('cam2_url_input').value = cam2.url;
+        const camCount = currentSettings.camera_count || 2;
+        document.getElementById('camera_count').value = camCount;
+        document.getElementById('cam1_url_input').value = cam1.url || "";
+        document.getElementById('cam2_url_input').value = cam2.url || "";
 
         document.getElementById('moonraker_url').value = currentSettings.moonraker_url || "";
-        document.getElementById('check_interval').value = currentSettings.check_interval;
+        document.getElementById('check_interval').value = currentSettings.check_interval || 500;
 
         document.getElementById('warn_threshold').value =
             Math.round((currentSettings.warn_threshold || 0.30) * 100);
@@ -327,31 +322,25 @@ async function loadSettings() {
         document.getElementById('ai_threshold').value =
             Math.round((currentSettings.ai_threshold || 0.50) * 100);
 
-        // Load masks
         const masksCfg = currentSettings.masks || {};
         maskZones[0] = Array.isArray(masksCfg["0"]) ? [...masksCfg["0"]] : [];
         maskZones[1] = Array.isArray(masksCfg["1"]) ? [...masksCfg["1"]] : [];
 
         document.getElementById('consecutive_failures').value =
-            currentSettings.consecutive_failures;
+            currentSettings.consecutive_failures || 2;
 
         document.getElementById('on_failure').value =
-            currentSettings.on_failure || "nothing";
+            currentSettings.on_failure || "pause";
 
         document.getElementById('aspect_ratio').value =
             currentSettings.aspect_ratio || "16:9";
 
-        // NEW: Load auto-enable
-        autoEnableToggle.checked = currentSettings.auto_enable || false;
-
-        const ratio = currentSettings.aspect_ratio.replace(':', '/');
+        const ratio = (currentSettings.aspect_ratio || "16:9").replace(':', '/');
         cam1View.style.aspectRatio = ratio;
         cam2View.style.aspectRatio = ratio;
-        document.documentElement.style.setProperty("--aspect-ratio", ratio);
 
-        applyLayout(currentSettings.camera_count || 2);
-        startImageLoop(currentSettings.check_interval);
-
+        applyLayout(camCount);
+        startImageLoop(currentSettings.check_interval || 500);
     } catch (err) {
         console.error(err);
     }
@@ -362,20 +351,19 @@ document.getElementById('open-settings-btn').addEventListener('click', () => {
     settingsModal.showModal();
 });
 
-document.getElementById('close-modal-x').addEventListener('click', () => {
-    settingsModal.close();
-});
+document.getElementById('close-modal-x').addEventListener('click', () => settingsModal.close());
 
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
     const newInterval = parseInt(document.getElementById('check_interval').value);
-
-    currentSettings.camera_count = parseInt(document.getElementById('camera_count').value);
+    const camCount = parseInt(document.getElementById('camera_count').value);
+    
+    currentSettings.camera_count = camCount;
     currentSettings.cameras[0].url = document.getElementById('cam1_url_input').value;
+    if (camCount === 1) currentSettings.cameras[0].enabled = true;
+    
     currentSettings.cameras[1].url = document.getElementById('cam2_url_input').value;
-
     currentSettings.moonraker_url = document.getElementById('moonraker_url').value;
-    currentSettings.check_interval = newInterval;
-
+    
     currentSettings.warn_threshold =
         parseInt(document.getElementById('warn_threshold').value) / 100.0;
 
@@ -400,43 +388,56 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(currentSettings)
     });
-
+    
     const ratio = currentSettings.aspect_ratio.replace(':', '/');
     cam1View.style.aspectRatio = ratio;
     cam2View.style.aspectRatio = ratio;
-    document.documentElement.style.setProperty("--aspect-ratio", ratio);
-
-    applyLayout(currentSettings.camera_count);
-    startImageLoop(newInterval);
-
+    
+    applyLayout(camCount);
+    startImageLoop(newInterval); 
+    
     alert("Configuration Saved!");
     settingsModal.close();
 });
 
-// --- NEW: Auto Enable Toggle ---
-autoEnableToggle.addEventListener('change', () => {
-    currentSettings.auto_enable = autoEnableToggle.checked;
+// ----- Floating log panel -----
+let autoScrollLogs = true;
+const logPanel = document.getElementById('log-panel');
+const logContent = document.getElementById('log-content');
+const logToggleBtn = document.getElementById('log-toggle-btn');
+const logCloseBtn = document.getElementById('log-close-btn');
 
-    fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentSettings)
+if (logToggleBtn && logPanel && logContent && logCloseBtn) {
+    logToggleBtn.addEventListener('click', () => {
+        logPanel.classList.toggle('hidden');
     });
-});
 
-// CLEAR MASKS
-cam1ClearBtn.addEventListener('click', () => {
-    maskZones[0] = [];
-    syncMasksToServer();
-});
-cam2ClearBtn.addEventListener('click', () => {
-    maskZones[1] = [];
-    syncMasksToServer();
-});
+    logCloseBtn.addEventListener('click', () => {
+        logPanel.classList.add('hidden');
+    });
 
-// Start mask drawing
-setupMaskDrawing(0, cam1View);
-setupMaskDrawing(1, cam2View);
+    logContent.addEventListener('scroll', () => {
+        const atBottom = logContent.scrollHeight - logContent.scrollTop <= logContent.clientHeight + 5;
+        autoScrollLogs = atBottom;
+    });
 
-// Initial load
+    function updateLogView(text) {
+        logContent.textContent = text || '';
+        if (autoScrollLogs) {
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+    }
+
+    setInterval(async () => {
+        try {
+            const res = await fetch('/api/logs');
+            if (!res.ok) return;
+            const data = await res.json();
+            updateLogView(data.logs);
+        } catch (e) {
+            // ignore log fetch failing
+        }
+    }, 1500);
+}
+
 loadSettings();
