@@ -56,7 +56,7 @@ h2 { margin: 0; font-weight: 600; color: #fff; }
 /* Reduce viewport height when only 1 camera is shown */
 .camera-grid.single-mode .camera-card .camera-viewport {
     width: 100%;
-    max-width: 90vw;     /* allows full screen width but keeps UI visible */
+    max-width: 80vw;     /* allows full screen width but keeps UI visible */
     aspect-ratio: var(--aspect-ratio);
 
     height: auto !important;   /* override earlier size rules */
