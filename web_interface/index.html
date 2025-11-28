@@ -99,6 +99,28 @@
                     </select>
                 </div>
             </div>
+
+            <div class="setting-group">
+                <h4>Detection Logic</h4>
+                <div class="setting-row">
+                    <label>Check Interval (ms):</label>
+                    <input type="number" id="check_interval" step="100" min="100">
+                </div>
+                <p class="help-text">Speed of AI checks. Also controls UI refresh rate.</p>
+                
+                <div class="setting-row">
+                    <label>Detection Threshold (%):</label>
+                    <input type="number" id="warn_threshold" step="5" min="0" max="100">
+                </div>
+                <p class="help-text">Shows yellow warning box if detection is above this (0 - 100).</p>
+
+                <div class="setting-row">
+                    <label>Trigger Threshold (%):</label>
+                    <input type="number" id="ai_threshold" step="5" min="0" max="100">
+                </div>
+                <p class="help-text">Triggers 'On Failure' action if above this (0 - 100).</p>
+
+            </div>
             
             <div class="setting-group">
                 <h4>Exclusion Mask</h4>
@@ -122,33 +144,7 @@
                     <label>Height (%):</label>
                     <input type="number" id="ex_h" step="5" min="0" max="100">
                 </div>
-                <p class="help-text">Area to black out (ignore) in the camera view.</p>
-            </div>
-
-            <div class="setting-group">
-                <h4>Detection Logic</h4>
-                <div class="setting-row">
-                    <label>Check Interval (ms):</label>
-                    <input type="number" id="check_interval" step="100" min="100">
-                </div>
-                <p class="help-text">Speed of AI checks. Also controls UI refresh rate.</p>
-                
-                <div class="setting-row">
-                    <label>Detection Threshold (%):</label>
-                    <input type="number" id="warn_threshold" step="5" min="0" max="100">
-                </div>
-                <p class="help-text">Shows yellow warning box if detection is above this (0 - 100).</p>
-
-                <div class="setting-row">
-                    <label>Trigger Threshold (%):</label>
-                    <input type="number" id="ai_threshold" step="5" min="0" max="100">
-                </div>
-                <p class="help-text">Triggers 'On Failure' action if above this (0 - 100).</p>
-
-                <div class="setting-row">
-                    <label>Moonraker URL:</label>
-                    <input type="text" id="moonraker_url" placeholder="[http://127.0.0.1:7125](http://127.0.0.1:7125)">
-                </div>
+                <p class="help-text">Blacks out this area so the AI ignores it. Use 'Visualize Mask' on dashboard to see it.</p>
             </div>
 
             <div class="setting-group">
@@ -164,6 +160,10 @@
                         <option value="pause">Pause Print</option>
                         <option value="cancel">Cancel Print</option>
                     </select>
+                </div>
+                <div class="setting-row">
+                    <label>Moonraker URL:</label>
+                    <input type="text" id="moonraker_url" placeholder="http://127.0.0.1:7125">
                 </div>
             </div>
         </div>
