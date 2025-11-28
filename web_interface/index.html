@@ -15,16 +15,13 @@
 
         <div class="main-content">
             <div class="camera-grid" id="camera-grid">
-
                 <!-- CAMERA 1 -->
                 <div class="camera-card" id="card-cam1">
                     <div class="cam-header"><h3>Primary Camera</h3></div>
-
                     <div class="camera-viewport" id="cam1-container">
-                        <img id="cam1-img" class="live-feed" alt="">
+                        <img id="cam1-img" class="live-feed" alt="" />
                         <div class="disabled-overlay" id="cam1-overlay"><span>DISABLED</span></div>
                     </div>
-
                     <div class="cam-controls">
                         <label class="toggle-switch">
                             <input type="checkbox" id="cam1-toggle">
@@ -32,7 +29,6 @@
                             <span class="label-text">Active</span>
                         </label>
                     </div>
-
                     <div class="mask-tools">
                         <button id="cam1-clear-masks" class="secondary-btn">Clear Masks</button>
                     </div>
@@ -41,12 +37,10 @@
                 <!-- CAMERA 2 -->
                 <div class="camera-card" id="card-cam2">
                     <div class="cam-header"><h3>Secondary Camera</h3></div>
-
                     <div class="camera-viewport" id="cam2-container">
-                        <img id="cam2-img" class="live-feed" alt="">
+                        <img id="cam2-img" class="live-feed" alt="" />
                         <div class="disabled-overlay" id="cam2-overlay"><span>DISABLED</span></div>
                     </div>
-
                     <div class="cam-controls">
                         <label class="toggle-switch">
                             <input type="checkbox" id="cam2-toggle">
@@ -54,22 +48,18 @@
                             <span class="label-text">Active</span>
                         </label>
                     </div>
-
                     <div class="mask-tools">
                         <button id="cam2-clear-masks" class="secondary-btn">Clear Masks</button>
                     </div>
                 </div>
-
             </div>
 
-            <!-- CENTER MASK INFO -->
             <div id="mask-help-center">
                 <p class="help-text">
-                    Click and drag on the camera to add mask zones. Right-click a zone to remove it. Click 'Visualize Mask' to show the mask overlay.
+                    Click and drag on the camera to add mask zones. Right-click a zone to remove it.
                 </p>
             </div>
 
-            <!-- HEALTH BAR -->
             <div class="health-section">
                 <div class="health-header">
                     <span>Failure Probability: <span id="ssim-val">--%</span></span>
@@ -80,42 +70,35 @@
                 </div>
             </div>
 
-            <!-- CONTROLS -->
             <div class="controls">
-
                 <button id="mask-toggle-btn" class="secondary-btn">Visualize Mask</button>
-
-                <button id="force-start-btn" class="primary-btn btn-success">
-                    ▶ Start Monitoring
-                </button>
-
-                <!-- AUTO ENABLE -->
-                <label class="toggle-switch" style="margin-left: 12px;">
-                    <input type="checkbox" id="auto-enable-toggle">
-                    <span class="slider"></span>
-                    <span class="label-text">Auto Enable</span>
-                </label>
-
+                <button id="force-start-btn" class="primary-btn btn-success">▶ Start Monitoring</button>
                 <button id="open-settings-btn" class="secondary-btn">⚙️ Settings</button>
-
             </div>
-
         </div>
     </div>
 
-    <!-- SETTINGS MODAL -->
+    <!-- Floating Log Button -->
+    <button id="log-toggle-btn" class="log-floating-btn">Logs ▾</button>
+
+    <!-- Floating Log Panel -->
+    <div id="log-panel" class="log-panel hidden">
+        <div class="log-panel-header">
+            <span>Plugin Log</span>
+            <button id="log-close-btn" class="log-close-btn">✕</button>
+        </div>
+        <div id="log-content" class="log-content"></div>
+    </div>
+
     <dialog id="settings-modal">
         <div class="modal-header">
             <h3>Configuration</h3>
             <button id="close-modal-x" class="icon-btn">×</button>
         </div>
-
         <div class="modal-body">
 
-            <!-- CAMERA SETUP -->
             <div class="setting-group">
                 <h4>Camera Setup</h4>
-
                 <div class="setting-row">
                     <label>Camera Count:</label>
                     <select id="camera_count">
@@ -123,17 +106,14 @@
                         <option value="2">2 Cameras</option>
                     </select>
                 </div>
-
                 <div class="setting-row">
                     <label>Cam 1 URL:</label>
-                    <input type="text" id="cam1_url_input">
+                    <input type="text" id="cam1_url_input" placeholder="http://127.0.0.1/webcam/?action=snapshot">
                 </div>
-
                 <div class="setting-row" id="cam2-settings-row">
                     <label>Cam 2 URL:</label>
-                    <input type="text" id="cam2_url_input">
+                    <input type="text" id="cam2_url_input" placeholder="">
                 </div>
-
                 <div class="setting-row">
                     <label>Aspect Ratio:</label>
                     <select id="aspect_ratio">
@@ -141,44 +121,26 @@
                         <option value="4:3">4:3</option>
                     </select>
                 </div>
-
-                <!-- MOVED HERE: MOONRAKER URL AT END OF CAMERA SETUP -->
-                <div class="setting-row">
-                    <label>Moonraker URL:</label>
-                    <input type="text" id="moonraker_url">
-                </div>
-
             </div>
 
-            <!-- DETECTION -->
             <div class="setting-group">
                 <h4>Detection Logic</h4>
-
                 <div class="setting-row">
                     <label>Check Interval (ms):</label>
-                    <input type="number" id="check_interval" min="100" step="100">
+                    <input type="number" id="check_interval" min="100" step="50">
                 </div>
-
                 <div class="setting-row">
                     <label>Detection Threshold (%):</label>
-                    <input type="number" id="warn_threshold" min="0" max="100">
+                    <input type="number" id="warn_threshold" min="0" max="100" step="1">
                 </div>
-
                 <div class="setting-row">
                     <label>Trigger Threshold (%):</label>
-                    <input type="number" id="ai_threshold" min="0" max="100">
+                    <input type="number" id="ai_threshold" min="0" max="100" step="1">
                 </div>
-            </div>
-
-            <!-- ACTIONS -->
-            <div class="setting-group">
-                <h4>Actions</h4>
-
                 <div class="setting-row">
                     <label>Max Retries:</label>
-                    <input type="number" id="consecutive_failures">
+                    <input type="number" id="consecutive_failures" min="1" step="1">
                 </div>
-
                 <div class="setting-row">
                     <label>On Failure:</label>
                     <select id="on_failure">
@@ -187,11 +149,13 @@
                         <option value="cancel">Cancel Print</option>
                     </select>
                 </div>
-
+                <div class="setting-row">
+                    <label>Moonraker URL:</label>
+                    <input type="text" id="moonraker_url" placeholder="http://127.0.0.1:7125">
+                </div>
             </div>
 
         </div>
-
         <div class="modal-footer">
             <button id="save-settings-btn" class="primary-btn">Save Configuration</button>
         </div>
