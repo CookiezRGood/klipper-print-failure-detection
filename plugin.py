@@ -12,7 +12,7 @@ from flask import Flask, jsonify, request, Response, send_from_directory
 log = logging.getLogger('werkzeug')
 log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN <<<")
+logging.info(">>> STARTING PLUGIN: EDGE MASKING <<<")
 
 # Import TFLite Runtime
 try:
@@ -42,13 +42,13 @@ default_config = {
     "on_failure": "pause",
     "aspect_ratio": "16:9",
     
-    # NEW: Exclusion Mask Settings (Percentages 0-100)
-    "exclusion": {
+    # NEW: Edge Mask Settings (Percentages 0-100)
+    "mask_edges": {
         "enabled": False,
-        "x": 0,
-        "y": 0,
-        "w": 20,
-        "h": 20
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
     }
 }
 
@@ -61,9 +61,10 @@ if os.path.exists(SETTINGS_FILE):
                 config["cameras"][0]["url"] = loaded["camera_url"]
             config.update(loaded)
             
-            # Ensure exclusion dict exists if upgrading from old config
-            if "exclusion" not in config:
-                config["exclusion"] = default_config["exclusion"]
+            # Init new mask config if missing
+            if "mask_edges" not in config:
+                config["mask_edges"] = default_config["mask_edges"]
+                
     except Exception: pass
 
 def save_config_to_file():
@@ -77,7 +78,7 @@ state = {
     "failure_count": 0,
     "action_triggered": False,
     "monitoring_active": False,
-    "show_mask_overlay": False, # Toggles visualization on/off
+    "show_mask_overlay": False,
     "cameras": {
         0: {"frame": None, "score": 0.0},
         1: {"frame": None, "score": 0.0}
@@ -223,7 +224,6 @@ def action_stop():
     logging.info("Monitoring STOPPED")
     return jsonify({"success": True})
 
-# NEW: Toggle Mask Visibility
 @app.route('/api/action/toggle_mask', methods=['POST'])
 def toggle_mask():
     data = request.json
@@ -266,15 +266,16 @@ def background_monitor():
             
             cam_limit = int(config.get("camera_count", 2))
             
-            # --- MASK CONFIG ---
-            excl = config.get("exclusion", {})
-            ex_enabled = excl.get("enabled", False)
+            # --- EDGE MASK CONFIG ---
+            edges = config.get("mask_edges", {})
+            mask_enabled = edges.get("enabled", False)
             
             for cam in config["cameras"]:
                 cam_id = cam["id"]
                 if cam_id >= cam_limit:
                     state["cameras"][cam_id]["score"] = 0.0
                     continue
+
                 if not cam["enabled"] or not cam["url"]: 
                     state["cameras"][cam_id]["score"] = 0.0
                     continue
@@ -285,29 +286,40 @@ def background_monitor():
                         arr = np.frombuffer(resp.content, np.uint8)
                         img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                         
-                        # --- DRAWING/DEBUG COPY ---
                         debug_img = img.copy()
                         h, w = img.shape[:2]
-
-                        # --- APPLY EXCLUSION MASK (If Enabled) ---
-                        if ex_enabled:
-                            # Convert % to Pixels
-                            mx = int((excl.get("x", 0) / 100) * w)
-                            my = int((excl.get("y", 0) / 100) * h)
-                            mw = int((excl.get("w", 20) / 100) * w)
-                            mh = int((excl.get("h", 20) / 100) * h)
+                        
+                        # --- APPLY EDGE MASKS ---
+                        if mask_enabled:
+                            # Calculate pixel depths
+                            t_px = int((edges.get("top", 0) / 100) * h)
+                            b_px = int((edges.get("bottom", 0) / 100) * h)
+                            l_px = int((edges.get("left", 0) / 100) * w)
+                            r_px = int((edges.get("right", 0) / 100) * w)
                             
-                            # Draw BLACK box on the image fed to AI
-                            cv2.rectangle(img, (mx, my), (mx+mw, my+mh), (0, 0, 0), -1)
+                            # Draw BLACK boxes on AI Input Image
+                            # Top
+                            cv2.rectangle(img, (0, 0), (w, t_px), (0,0,0), -1)
+                            # Bottom
+                            cv2.rectangle(img, (0, h - b_px), (w, h), (0,0,0), -1)
+                            # Left
+                            cv2.rectangle(img, (0, 0), (l_px, h), (0,0,0), -1)
+                            # Right
+                            cv2.rectangle(img, (w - r_px, 0), (w, h), (0,0,0), -1)
                             
-                            # Draw PURPLE box on debug image if toggle is ON
+                            # Visualization (Purple Overlay)
                             if state["show_mask_overlay"]:
-                                # Draw semi-transparent overlay
                                 overlay = debug_img.copy()
-                                cv2.rectangle(overlay, (mx, my), (mx+mw, my+mh), (255, 0, 255), -1)
+                                # Top
+                                cv2.rectangle(overlay, (0, 0), (w, t_px), (255, 0, 255), -1)
+                                # Bottom
+                                cv2.rectangle(overlay, (0, h - b_px), (w, h), (255, 0, 255), -1)
+                                # Left
+                                cv2.rectangle(overlay, (0, 0), (l_px, h), (255, 0, 255), -1)
+                                # Right
+                                cv2.rectangle(overlay, (w - r_px, 0), (w, h), (255, 0, 255), -1)
+                                
                                 cv2.addWeighted(overlay, 0.3, debug_img, 0.7, 0, debug_img)
-                                cv2.rectangle(debug_img, (mx, my), (mx+mw, my+mh), (255, 0, 255), 2)
-                                cv2.putText(debug_img, "MASK", (mx, my-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
 
                         if not should_run:
                             state["cameras"][cam_id]["frame"] = debug_img
@@ -315,8 +327,7 @@ def background_monitor():
                             continue
                         
                         if ai_ready:
-                            score, detections = run_inference(img) # Pass the masked image
-                            
+                            score, detections = run_inference(img)
                             trigger_thresh = float(config.get("ai_threshold", 0.5))
 
                             for d in detections:
@@ -385,6 +396,8 @@ monitor_thread.start()
 
 @app.route('/')
 def serve_index(): return send_from_directory('web_interface', 'index.html')
+@app.route('/mini')
+def serve_mini(): return send_from_directory('web_interface', 'mini.html')
 @app.route('/<path:path>')
 def serve_static(path): return send_from_directory('web_interface', path)
 @app.route('/api/settings', methods=['GET', 'POST'])
