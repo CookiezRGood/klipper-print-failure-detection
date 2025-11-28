@@ -8,11 +8,13 @@ import json
 import os
 from flask import Flask, jsonify, request, Response, send_from_directory
 
+# --- LOGGING ---
 log = logging.getLogger('werkzeug')
 log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logging.info(">>> STARTING PLUGIN <<<")
 
+# Import TFLite Runtime
 try:
     import tflite_runtime.interpreter as tflite
 except ImportError:
@@ -40,7 +42,7 @@ default_config = {
     "on_failure": "pause",
     "aspect_ratio": "16:9",
     
-    # NEW EDGE MASK SETTINGS
+    # EDGE-BASED MASK SETTINGS
     "exclusion": {
         "enabled": False,
         "left": 0,
@@ -80,6 +82,8 @@ state = {
     }
 }
 
+
+# --- AI ENGINE ---
 interpreter = None
 input_details = None
 output_details = None
@@ -112,6 +116,7 @@ def load_model():
         return False
 
 ai_ready = load_model()
+
 
 def post_process_yolo(output_data, img_width, img_height, conf_threshold):
     if output_data.shape[1] < output_data.shape[2]:
@@ -173,6 +178,7 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
             
     return final_results
 
+
 def run_inference(image):
     if not ai_ready or interpreter is None:
         return 0.0, []
@@ -206,6 +212,8 @@ def run_inference(image):
         logging.error(f"Inference Error: {e}")
         return 0.0, []
 
+
+# --- ROUTES ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
@@ -225,6 +233,7 @@ def toggle_mask():
     state["show_mask_overlay"] = data.get("show", False)
     return jsonify({"success": True})
 
+
 def get_printer_state():
     url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
     try:
@@ -235,6 +244,7 @@ def get_printer_state():
     except Exception:
         pass
     return "standby"
+
 
 def trigger_printer_action(reason="Failure"):
     if state["action_triggered"]:
@@ -253,6 +263,7 @@ def trigger_printer_action(reason="Failure"):
     except Exception:
         pass
 
+
 def background_monitor():
     while True:
         try:
@@ -265,7 +276,6 @@ def background_monitor():
             max_frame_score = 0.0
             
             cam_limit = int(config.get("camera_count", 2))
-            
             excl = config.get("exclusion", {})
             ex_enabled = excl.get("enabled", False)
             
@@ -287,26 +297,37 @@ def background_monitor():
                         debug_img = img.copy()
                         h, w = img.shape[:2]
 
+                        # --- NEW REVERSED MASK LOGIC ---
                         if ex_enabled:
-                            left   = int((excl.get("left",   0) / 100) * w)
-                            right  = int((excl.get("right",  0) / 100) * w)
-                            top    = int((excl.get("top",    0) / 100) * h)
-                            bottom = int((excl.get("bottom", 0) / 100) * h)
+                            left_px   = int((excl.get("left",   0) / 100) * w)
+                            right_px  = int((excl.get("right",  0) / 100) * w)
+                            top_px    = int((excl.get("top",    0) / 100) * h)
+                            bottom_px = int((excl.get("bottom", 0) / 100) * h)
 
-                            mx = left
-                            my = top
-                            mw = max(0, w - left - right)
-                            mh = max(0, h - top - bottom)
+                            # LEFT region
+                            if left_px > 0:
+                                cv2.rectangle(img, (0, 0), (left_px, h), (0, 0, 0), -1)
+                                if state["show_mask_overlay"]:
+                                    cv2.rectangle(debug_img, (0, 0), (left_px, h), (255, 0, 255), -1)
 
-                            cv2.rectangle(img, (mx, my), (mx+mw, my+mh), (0, 0, 0), -1)
-                            
-                            if state["show_mask_overlay"]:
-                                overlay = debug_img.copy()
-                                cv2.rectangle(overlay, (mx, my), (mx+mw, my+mh), (255, 0, 255), -1)
-                                cv2.addWeighted(overlay, 0.3, debug_img, 0.7, 0, debug_img)
-                                cv2.rectangle(debug_img, (mx, my), (mx+mw, my+mh), (255, 0, 255), 2)
-                                cv2.putText(debug_img, "MASK", (mx, my-5),
-                                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,255), 1)
+                            # RIGHT region
+                            if right_px > 0:
+                                cv2.rectangle(img, (w - right_px, 0), (w, h), (0, 0, 0), -1)
+                                if state["show_mask_overlay"]:
+                                    cv2.rectangle(debug_img, (w - right_px, 0), (w, h), (255, 0, 255), -1)
+
+                            # TOP region
+                            if top_px > 0:
+                                cv2.rectangle(img, (0, 0), (w, top_px), (0, 0, 0), -1)
+                                if state["show_mask_overlay"]:
+                                    cv2.rectangle(debug_img, (0, 0), (w, top_px), (255, 0, 255), -1)
+
+                            # BOTTOM region
+                            if bottom_px > 0:
+                                cv2.rectangle(img, (0, h - bottom_px), (w, h), (0, 0, 0), -1)
+                                if state["show_mask_overlay"]:
+                                    cv2.rectangle(debug_img, (0, h - bottom_px), (w, h), (255, 0, 255), -1)
+
 
                         if not should_run:
                             state["cameras"][cam_id]["frame"] = debug_img
