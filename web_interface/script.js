@@ -20,18 +20,14 @@ const cam2Toggle = document.getElementById('cam2-toggle');
 const cam1View = document.getElementById('cam1-container');
 const cam2View = document.getElementById('cam2-container');
 
-/* Update slider readouts */
-function linkSlider(sliderId, labelId) {
-    const slider = document.getElementById(sliderId);
-    const label = document.getElementById(labelId);
-    slider.addEventListener("input", () => {
-        label.innerText = slider.value + "%";
-    });
-}
-linkSlider("ex_left", "ex_left_val");
-linkSlider("ex_right", "ex_right_val");
-linkSlider("ex_top", "ex_top_val");
-linkSlider("ex_bottom", "ex_bottom_val");
+const cam1ClearBtn = document.getElementById('cam1-clear-masks');
+const cam2ClearBtn = document.getElementById('cam2-clear-masks');
+
+// per-camera mask zones, normalized [0–1]
+const maskZones = {
+    0: [],
+    1: []
+};
 
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
@@ -165,13 +161,137 @@ function applyLayout(count) {
         cameraGrid.classList.add('single-mode');
         cam2Card.classList.add('hidden');
         cam1Card.querySelector('.cam-controls').style.display = 'none';
-        if(cam2Row) cam2Row.style.display = 'none';
+        if (cam2Row) cam2Row.style.display = 'none';
+        if (cam2ClearBtn) cam2ClearBtn.parentElement.style.display = 'none';
     } else {
         cameraGrid.classList.remove('single-mode');
         cam2Card.classList.remove('hidden');
         cam1Card.querySelector('.cam-controls').style.display = 'flex';
-        if(cam2Row) cam2Row.style.display = ''; 
+        if (cam2Row) cam2Row.style.display = ''; 
+        if (cam2ClearBtn) cam2ClearBtn.parentElement.style.display = '';
     }
+}
+
+function syncMasksToServer() {
+    if (!currentSettings) return;
+    currentSettings.masks = {
+        "0": maskZones[0],
+        "1": maskZones[1]
+    };
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentSettings)
+    }).catch(() => {});
+}
+
+function setupMaskDrawing(camId, containerEl) {
+    let isDrawing = false;
+    let startX = 0, startY = 0;
+    let tempRect = null;
+
+    function getRelativePos(e) {
+        const rect = containerEl.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        return { x, y, width: rect.width, height: rect.height };
+    }
+
+    containerEl.addEventListener('mousedown', (e) => {
+        // Only left-click to start
+        if (e.button !== 0) return;
+        const { x, y, width, height } = getRelativePos(e);
+        if (x < 0 || y < 0 || x > width || y > height) return;
+
+        isDrawing = true;
+        startX = x;
+        startY = y;
+
+        tempRect = document.createElement('div');
+        tempRect.style.position = 'absolute';
+        tempRect.style.border = '1px solid #ff00ff';
+        tempRect.style.backgroundColor = 'rgba(255, 0, 255, 0.2)';
+        tempRect.style.pointerEvents = 'none';
+        tempRect.style.left = `${startX}px`;
+        tempRect.style.top = `${startY}px`;
+        tempRect.style.width = '0px';
+        tempRect.style.height = '0px';
+        containerEl.appendChild(tempRect);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isDrawing || !tempRect) return;
+        const { x, y } = getRelativePos(e);
+
+        const currX = x;
+        const currY = y;
+        const rectX = Math.min(startX, currX);
+        const rectY = Math.min(startY, currY);
+        const rectW = Math.abs(currX - startX);
+        const rectH = Math.abs(currY - startY);
+
+        tempRect.style.left = `${rectX}px`;
+        tempRect.style.top = `${rectY}px`;
+        tempRect.style.width = `${rectW}px`;
+        tempRect.style.height = `${rectH}px`;
+    });
+
+    window.addEventListener('mouseup', (e) => {
+        if (!isDrawing || !tempRect) return;
+        isDrawing = false;
+
+        const { x, y, width, height } = getRelativePos(e);
+        const endX = x;
+        const endY = y;
+
+        const rectX = Math.min(startX, endX);
+        const rectY = Math.min(startY, endY);
+        const rectW = Math.abs(endX - startX);
+        const rectH = Math.abs(endY - startY);
+
+        containerEl.removeChild(tempRect);
+        tempRect = null;
+
+        // Ignore tiny drags
+        if (rectW < 10 || rectH < 10) return;
+
+        const normX = rectX / width;
+        const normY = rectY / height;
+        const normW = rectW / width;
+        const normH = rectH / height;
+
+        maskZones[camId].push({
+            x: normX,
+            y: normY,
+            w: normW,
+            h: normH
+        });
+
+        syncMasksToServer();
+    });
+
+    // Right-click to delete a zone
+    containerEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const { x, y, width, height } = getRelativePos(e);
+        const nx = x / width;
+        const ny = y / height;
+
+        const zones = maskZones[camId];
+        for (let i = zones.length - 1; i >= 0; i--) {
+            const z = zones[i];
+            if (
+                nx >= z.x &&
+                ny >= z.y &&
+                nx <= z.x + z.w &&
+                ny <= z.y + z.h
+            ) {
+                zones.splice(i, 1);
+                break;
+            }
+        }
+        syncMasksToServer();
+    });
 }
 
 async function loadSettings() {
@@ -195,23 +315,11 @@ async function loadSettings() {
         document.getElementById('warn_threshold').value = Math.round((currentSettings.warn_threshold || 0.30) * 100);
         document.getElementById('ai_threshold').value = Math.round((currentSettings.ai_threshold || 0.50) * 100);
         
-        /* Load new mask system */
-        const excl = currentSettings.exclusion || { enabled:false,left:0,right:0,top:0,bottom:0 };
-
-        document.getElementById('ex_enabled').checked = excl.enabled;
-
-        document.getElementById('ex_left').value = excl.left;
-        document.getElementById('ex_left_val').innerText = excl.left + "%";
-
-        document.getElementById('ex_right').value = excl.right;
-        document.getElementById('ex_right_val').innerText = excl.right + "%";
-
-        document.getElementById('ex_top').value = excl.top;
-        document.getElementById('ex_top_val').innerText = excl.top + "%";
-
-        document.getElementById('ex_bottom').value = excl.bottom;
-        document.getElementById('ex_bottom_val').innerText = excl.bottom + "%";
-
+        // LOAD MASK ZONES PER CAMERA
+        const masksCfg = currentSettings.masks || {};
+        maskZones[0] = Array.isArray(masksCfg["0"]) ? [...masksCfg["0"]] : [];
+        maskZones[1] = Array.isArray(masksCfg["1"]) ? [...masksCfg["1"]] : [];
+        
         document.getElementById('consecutive_failures').value = currentSettings.consecutive_failures;
         document.getElementById('on_failure').value = currentSettings.on_failure || "nothing";
         document.getElementById('aspect_ratio').value = currentSettings.aspect_ratio || "16:9";
@@ -247,13 +355,10 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     currentSettings.warn_threshold = parseInt(document.getElementById('warn_threshold').value) / 100.0;
     currentSettings.ai_threshold = parseInt(document.getElementById('ai_threshold').value) / 100.0;
     
-    /* Save edge-based mask */
-    currentSettings.exclusion = {
-        enabled: document.getElementById('ex_enabled').checked,
-        left: parseInt(document.getElementById('ex_left').value),
-        right: parseInt(document.getElementById('ex_right').value),
-        top: parseInt(document.getElementById('ex_top').value),
-        bottom: parseInt(document.getElementById('ex_bottom').value)
+    // Include current masks in settings
+    currentSettings.masks = {
+        "0": maskZones[0],
+        "1": maskZones[1]
     };
     
     currentSettings.consecutive_failures = parseInt(document.getElementById('consecutive_failures').value);
@@ -277,4 +382,19 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     settingsModal.close();
 });
 
+// Clear masks buttons
+cam1ClearBtn.addEventListener('click', () => {
+    maskZones[0] = [];
+    syncMasksToServer();
+});
+cam2ClearBtn.addEventListener('click', () => {
+    maskZones[1] = [];
+    syncMasksToServer();
+});
+
+// Setup drag drawing for each camera
+setupMaskDrawing(0, cam1View);
+setupMaskDrawing(1, cam2View);
+
+// Initial load
 loadSettings();
