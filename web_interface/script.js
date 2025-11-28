@@ -20,6 +20,19 @@ const cam2Toggle = document.getElementById('cam2-toggle');
 const cam1View = document.getElementById('cam1-container');
 const cam2View = document.getElementById('cam2-container');
 
+/* Update slider readouts */
+function linkSlider(sliderId, labelId) {
+    const slider = document.getElementById(sliderId);
+    const label = document.getElementById(labelId);
+    slider.addEventListener("input", () => {
+        label.innerText = slider.value + "%";
+    });
+}
+linkSlider("ex_left", "ex_left_val");
+linkSlider("ex_right", "ex_right_val");
+linkSlider("ex_top", "ex_top_val");
+linkSlider("ex_bottom", "ex_bottom_val");
+
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
     const safeRate = (rate && rate >= 100) ? rate : 500;
@@ -129,7 +142,6 @@ forceStartBtn.addEventListener('click', async () => {
 maskToggleBtn.addEventListener('click', async () => {
     isMaskVisible = !isMaskVisible;
     
-    // Visual feedback for button
     if (isMaskVisible) {
         maskToggleBtn.style.backgroundColor = "#2196F3";
         maskToggleBtn.style.color = "white";
@@ -183,19 +195,28 @@ async function loadSettings() {
         document.getElementById('warn_threshold').value = Math.round((currentSettings.warn_threshold || 0.30) * 100);
         document.getElementById('ai_threshold').value = Math.round((currentSettings.ai_threshold || 0.50) * 100);
         
-        // LOAD EXCLUSION SETTINGS
-        const excl = currentSettings.exclusion || { enabled: false, x: 0, y: 0, w: 20, h: 20 };
+        /* Load new mask system */
+        const excl = currentSettings.exclusion || { enabled:false,left:0,right:0,top:0,bottom:0 };
+
         document.getElementById('ex_enabled').checked = excl.enabled;
-        document.getElementById('ex_x').value = excl.x;
-        document.getElementById('ex_y').value = excl.y;
-        document.getElementById('ex_w').value = excl.w;
-        document.getElementById('ex_h').value = excl.h;
-        
+
+        document.getElementById('ex_left').value = excl.left;
+        document.getElementById('ex_left_val').innerText = excl.left + "%";
+
+        document.getElementById('ex_right').value = excl.right;
+        document.getElementById('ex_right_val').innerText = excl.right + "%";
+
+        document.getElementById('ex_top').value = excl.top;
+        document.getElementById('ex_top_val').innerText = excl.top + "%";
+
+        document.getElementById('ex_bottom').value = excl.bottom;
+        document.getElementById('ex_bottom_val').innerText = excl.bottom + "%";
+
         document.getElementById('consecutive_failures').value = currentSettings.consecutive_failures;
         document.getElementById('on_failure').value = currentSettings.on_failure || "nothing";
         document.getElementById('aspect_ratio').value = currentSettings.aspect_ratio || "16:9";
 
-        const ratio = (currentSettings.aspect_ratio || "16:9").replace(':', '/');
+        const ratio = (currentSettings.aspect_ratio || "16:9").replace(':','/');
         cam1View.style.aspectRatio = ratio;
         cam2View.style.aspectRatio = ratio;
         
@@ -226,13 +247,13 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     currentSettings.warn_threshold = parseInt(document.getElementById('warn_threshold').value) / 100.0;
     currentSettings.ai_threshold = parseInt(document.getElementById('ai_threshold').value) / 100.0;
     
-    // SAVE EXCLUSION SETTINGS
+    /* Save edge-based mask */
     currentSettings.exclusion = {
         enabled: document.getElementById('ex_enabled').checked,
-        x: parseInt(document.getElementById('ex_x').value),
-        y: parseInt(document.getElementById('ex_y').value),
-        w: parseInt(document.getElementById('ex_w').value),
-        h: parseInt(document.getElementById('ex_h').value)
+        left: parseInt(document.getElementById('ex_left').value),
+        right: parseInt(document.getElementById('ex_right').value),
+        top: parseInt(document.getElementById('ex_top').value),
+        bottom: parseInt(document.getElementById('ex_bottom').value)
     };
     
     currentSettings.consecutive_failures = parseInt(document.getElementById('consecutive_failures').value);
@@ -245,7 +266,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         body: JSON.stringify(currentSettings)
     });
     
-    const ratio = currentSettings.aspect_ratio.replace(':', '/');
+    const ratio = currentSettings.aspect_ratio.replace(':','/');
     cam1View.style.aspectRatio = ratio;
     cam2View.style.aspectRatio = ratio;
     
