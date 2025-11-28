@@ -55,11 +55,22 @@ h2 { margin: 0; font-weight: 600; color: #fff; }
 
 /* Reduce viewport height when only 1 camera is shown */
 .camera-grid.single-mode .camera-card .camera-viewport {
+    aspect-ratio: var(--aspect-ratio);
+    width: 100%;
+
+    /* maintain aspect ratio, but prevent scroll */
+    max-height: 55vh;
     height: auto;
-    max-height: 55vh;     /* UI still stays on screen */
-    aspect-ratio: inherit;/* Use the user's chosen aspect ratio */
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: black; /* fallback */
 }
 
+:root {
+    --aspect-ratio: 4 / 3; /* default; updated dynamically via JS */
+}
 
 .camera-grid.single-mode .camera-card {
     max-width: 800px; /* Prevent it from stretching too wide */
