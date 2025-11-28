@@ -234,7 +234,11 @@ select {
 .icon-btn:hover { color: #fff; }
 
 .help-text {
-    font-size: 0.8rem; color: #888; margin-top: -10px; margin-bottom: 15px;
+    font-size: 0.8rem; color: #888; margin-top: 8px; margin-bottom: 15px;
     font-style: italic; background-color: #222; padding: 8px; border-radius: 4px;
     border-left: 3px solid #f39c12;
+}
+
+.mask-tools {
+    margin-top: 6px;
 }
