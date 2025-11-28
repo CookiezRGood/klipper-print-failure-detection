@@ -42,8 +42,7 @@ default_config = {
     "on_failure": "pause",
     "aspect_ratio": "16:9",
 
-    # NEW: per-camera mask zones (normalized coordinates 0–1)
-    # "masks": { "0": [ {x,y,w,h}, ... ], "1": [ ... ] }
+    # per-camera mask zones (normalized coordinates 0–1)
     "masks": {
         "0": [],
         "1": []
