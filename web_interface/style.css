@@ -55,7 +55,7 @@ h2 { margin: 0; font-weight: 600; color: #fff; }
 
 /* Reduce viewport height when only 1 camera is shown */
 .camera-grid.single-mode .camera-card .camera-viewport {
-    max-height: 55vh;
+    max-height: 50vh;
     overflow: hidden;
 }
 
@@ -248,3 +248,16 @@ select {
 .mask-tools {
     margin-top: 6px;
 }
+
+#mask-help-center {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin: 10px 0 5px 0;
+}
+
+#mask-help-center .help-text {
+    max-width: 600px;   /* keeps it from stretching too wide */
+    margin: 0 auto 15px auto;
+}
+
