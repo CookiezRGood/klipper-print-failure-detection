@@ -12,7 +12,7 @@ from flask import Flask, jsonify, request, Response, send_from_directory
 log = logging.getLogger('werkzeug')
 log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logging.info(">>> STARTING PLUGIN: EXCLUSION MASK <<<")
+logging.info(">>> STARTING PLUGIN <<<")
 
 # Import TFLite Runtime
 try:
@@ -33,6 +33,7 @@ default_config = {
         {"id": 0, "name": "Primary", "url": "http://127.0.0.1/webcam/?action=snapshot", "enabled": True},
         {"id": 1, "name": "Secondary", "url": "", "enabled": False}
     ],
+    "camera_count": 2,
     "moonraker_url": "http://127.0.0.1:7125",
     "check_interval": 500,
     "warn_threshold": 0.30,
@@ -60,7 +61,7 @@ if os.path.exists(SETTINGS_FILE):
                 config["cameras"][0]["url"] = loaded["camera_url"]
             config.update(loaded)
             
-            # Ensure exclusion dict exists if upgrading
+            # Ensure exclusion dict exists if upgrading from old config
             if "exclusion" not in config:
                 config["exclusion"] = default_config["exclusion"]
     except Exception: pass
@@ -76,7 +77,7 @@ state = {
     "failure_count": 0,
     "action_triggered": False,
     "monitoring_active": False,
-    "show_mask_overlay": False, # Controls the purple visualization
+    "show_mask_overlay": False, # Toggles visualization on/off
     "cameras": {
         0: {"frame": None, "score": 0.0},
         1: {"frame": None, "score": 0.0}
@@ -222,7 +223,7 @@ def action_stop():
     logging.info("Monitoring STOPPED")
     return jsonify({"success": True})
 
-# NEW: Toggle Visual Mask
+# NEW: Toggle Mask Visibility
 @app.route('/api/action/toggle_mask', methods=['POST'])
 def toggle_mask():
     data = request.json
@@ -263,12 +264,17 @@ def background_monitor():
 
             max_frame_score = 0.0
             
-            # MASK CONFIG
+            cam_limit = int(config.get("camera_count", 2))
+            
+            # --- MASK CONFIG ---
             excl = config.get("exclusion", {})
             ex_enabled = excl.get("enabled", False)
             
             for cam in config["cameras"]:
                 cam_id = cam["id"]
+                if cam_id >= cam_limit:
+                    state["cameras"][cam_id]["score"] = 0.0
+                    continue
                 if not cam["enabled"] or not cam["url"]: 
                     state["cameras"][cam_id]["score"] = 0.0
                     continue
@@ -279,29 +285,29 @@ def background_monitor():
                         arr = np.frombuffer(resp.content, np.uint8)
                         img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
                         
+                        # --- DRAWING/DEBUG COPY ---
                         debug_img = img.copy()
                         h, w = img.shape[:2]
 
-                        # --- APPLY EXCLUSION MASK ---
+                        # --- APPLY EXCLUSION MASK (If Enabled) ---
                         if ex_enabled:
-                            # Calculate pixel coordinates from percentages
+                            # Convert % to Pixels
                             mx = int((excl.get("x", 0) / 100) * w)
                             my = int((excl.get("y", 0) / 100) * h)
                             mw = int((excl.get("w", 20) / 100) * w)
                             mh = int((excl.get("h", 20) / 100) * h)
                             
-                            # 1. Black out the AI input image (so it ignores this area)
+                            # Draw BLACK box on the image fed to AI
                             cv2.rectangle(img, (mx, my), (mx+mw, my+mh), (0, 0, 0), -1)
                             
-                            # 2. Visualize on UI if toggle is ON
+                            # Draw PURPLE box on debug image if toggle is ON
                             if state["show_mask_overlay"]:
-                                # Semi-transparent Purple fill
+                                # Draw semi-transparent overlay
                                 overlay = debug_img.copy()
                                 cv2.rectangle(overlay, (mx, my), (mx+mw, my+mh), (255, 0, 255), -1)
                                 cv2.addWeighted(overlay, 0.3, debug_img, 0.7, 0, debug_img)
-                                # Solid Purple Outline
                                 cv2.rectangle(debug_img, (mx, my), (mx+mw, my+mh), (255, 0, 255), 2)
-                                cv2.putText(debug_img, "IGNORED", (mx, my-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+                                cv2.putText(debug_img, "MASK", (mx, my-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
 
                         if not should_run:
                             state["cameras"][cam_id]["frame"] = debug_img
@@ -309,8 +315,7 @@ def background_monitor():
                             continue
                         
                         if ai_ready:
-                            # Run AI on the MASKED image
-                            score, detections = run_inference(img)
+                            score, detections = run_inference(img) # Pass the masked image
                             
                             trigger_thresh = float(config.get("ai_threshold", 0.5))
 
