@@ -257,7 +257,7 @@ select {
 }
 
 #mask-help-center .help-text {
-    max-width: 600px;   /* keeps it from stretching too wide */
+    max-width: 1500px;   /* keeps it from stretching too wide */
     margin: 0 auto 15px auto;
 }
 
