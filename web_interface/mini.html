@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Status</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Mini-Specific Overrides */
+        body { padding: 10px; background-color: transparent; }
+        .container { box-shadow: none; background-color: transparent; padding: 0; }
+        .health-section { margin-top: 0; }
+        .controls { justify-content: center; margin-top: 10px; }
+        .open-btn { width: 100%; background-color: #333; color: #fff; border: 1px solid #444; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .open-btn:hover { background-color: #444; }
+        /* Hide elements not needed in mini mode */
+        header, .camera-grid, #open-settings-btn, #force-start-btn { display: none; }
+        
+        /* Make status badge larger and centered */
+        #status-indicator { 
+            display: block; 
+            text-align: center; 
+            margin-bottom: 10px; 
+            font-size: 1rem; 
+            padding: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Status Badge -->
+        <div id="status-indicator" class="status-badge">WAITING</div>
+
+        <!-- Health Bar -->
+        <div class="health-section">
+            <div class="health-header">
+                <span>Risk: <span id="ssim-val">--%</span></span>
+                <span>Retries: <span id="retry-val">0/0</span></span>
+            </div>
+            <div class="progress-track">
+                <div id="confidence-bar" class="progress-fill"></div>
+            </div>
+        </div>
+
+        <!-- Link to Full Dashboard -->
+        <div class="controls">
+            <button class="open-btn" onclick="window.open('/', '_blank')">Open Full Dashboard ↗</button>
+        </div>
+    </div>
+
+    <!-- Reusing the main script but it will adapt based on missing elements -->
+    <script src="script.js"></script>
+</body>
+</html>
