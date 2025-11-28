@@ -1,11 +1,13 @@
 let imageInterval; 
 let currentSettings = {};
+let isMaskVisible = false;
 
 const statusBadge = document.getElementById('status-indicator');
 const ssimText = document.getElementById('ssim-val');
 const retryText = document.getElementById('retry-val');
 const confidenceBar = document.getElementById('confidence-bar');
 const forceStartBtn = document.getElementById('force-start-btn');
+const maskToggleBtn = document.getElementById('mask-toggle-btn');
 const settingsModal = document.getElementById('settings-modal');
 
 const cameraGrid = document.getElementById('camera-grid');
@@ -24,12 +26,10 @@ function startImageLoop(rate) {
     
     imageInterval = setInterval(() => {
         const timestamp = new Date().getTime();
-        // Update Cam 1 if enabled
         if (!cam1Card.classList.contains('disabled')) {
             cam1Img.src = `/api/frame/0?t=${timestamp}`;
         }
-        // Update Cam 2 only if enabled AND visible
-        if (!cam2Card.classList.contains('disabled') && !cam2Card.classList.contains('hidden')) {
+        if (!cam2Card.classList.contains('disabled')) {
             cam2Img.src = `/api/frame/1?t=${timestamp}`;
         }
     }, safeRate);
@@ -125,22 +125,40 @@ forceStartBtn.addEventListener('click', async () => {
     } catch (e) {}
 });
 
-// --- LAYOUT MANAGER ---
+// --- MASK TOGGLE ---
+maskToggleBtn.addEventListener('click', async () => {
+    isMaskVisible = !isMaskVisible;
+    
+    // Visual feedback for button
+    if (isMaskVisible) {
+        maskToggleBtn.style.backgroundColor = "#2196F3";
+        maskToggleBtn.style.color = "white";
+    } else {
+        maskToggleBtn.style.backgroundColor = "";
+        maskToggleBtn.style.color = "";
+    }
+
+    await fetch('/api/action/toggle_mask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ show: isMaskVisible })
+    });
+});
+
 function applyLayout(count) {
     const isSingle = parseInt(count) === 1;
+    const cam2Row = document.getElementById('cam2-settings-row');
     
     if (isSingle) {
         cameraGrid.classList.add('single-mode');
         cam2Card.classList.add('hidden');
-        
-        // Hide toggle, but force enable visually (logic handles backend)
         cam1Card.querySelector('.cam-controls').style.display = 'none';
-        document.getElementById('cam2-settings-row').style.display = 'none';
+        if(cam2Row) cam2Row.style.display = 'none';
     } else {
         cameraGrid.classList.remove('single-mode');
         cam2Card.classList.remove('hidden');
         cam1Card.querySelector('.cam-controls').style.display = 'flex';
-        document.getElementById('cam2-settings-row').style.display = '';
+        if(cam2Row) cam2Row.style.display = ''; 
     }
 }
 
@@ -155,7 +173,6 @@ async function loadSettings() {
         toggleCamera(0, cam1.enabled);
         toggleCamera(1, cam2.enabled);
 
-        // Populate UI
         document.getElementById('camera_count').value = currentSettings.camera_count || 2;
         document.getElementById('cam1_url_input').value = cam1.url;
         document.getElementById('cam2_url_input').value = cam2.url;
@@ -166,6 +183,14 @@ async function loadSettings() {
         document.getElementById('warn_threshold').value = Math.round((currentSettings.warn_threshold || 0.30) * 100);
         document.getElementById('ai_threshold').value = Math.round((currentSettings.ai_threshold || 0.50) * 100);
         
+        // LOAD EXCLUSION SETTINGS
+        const excl = currentSettings.exclusion || { enabled: false, x: 0, y: 0, w: 20, h: 20 };
+        document.getElementById('ex_enabled').checked = excl.enabled;
+        document.getElementById('ex_x').value = excl.x;
+        document.getElementById('ex_y').value = excl.y;
+        document.getElementById('ex_w').value = excl.w;
+        document.getElementById('ex_h').value = excl.h;
+        
         document.getElementById('consecutive_failures').value = currentSettings.consecutive_failures;
         document.getElementById('on_failure').value = currentSettings.on_failure || "nothing";
         document.getElementById('aspect_ratio').value = currentSettings.aspect_ratio || "16:9";
@@ -174,9 +199,7 @@ async function loadSettings() {
         cam1View.style.aspectRatio = ratio;
         cam2View.style.aspectRatio = ratio;
         
-        // Apply Camera Count Layout
         applyLayout(currentSettings.camera_count || 2);
-        
         startImageLoop(currentSettings.check_interval);
     } catch (e) { console.error(e); }
 }
@@ -194,19 +217,23 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     
     currentSettings.camera_count = camCount;
     currentSettings.cameras[0].url = document.getElementById('cam1_url_input').value;
-    
-    // Force Enable Cam 1 if single mode
-    if (camCount === 1) {
-        currentSettings.cameras[0].enabled = true;
-    }
+    if (camCount === 1) currentSettings.cameras[0].enabled = true;
     
     currentSettings.cameras[1].url = document.getElementById('cam2_url_input').value;
-    
     currentSettings.moonraker_url = document.getElementById('moonraker_url').value;
     currentSettings.check_interval = newInterval;
     
     currentSettings.warn_threshold = parseInt(document.getElementById('warn_threshold').value) / 100.0;
     currentSettings.ai_threshold = parseInt(document.getElementById('ai_threshold').value) / 100.0;
+    
+    // SAVE EXCLUSION SETTINGS
+    currentSettings.exclusion = {
+        enabled: document.getElementById('ex_enabled').checked,
+        x: parseInt(document.getElementById('ex_x').value),
+        y: parseInt(document.getElementById('ex_y').value),
+        w: parseInt(document.getElementById('ex_w').value),
+        h: parseInt(document.getElementById('ex_h').value)
+    };
     
     currentSettings.consecutive_failures = parseInt(document.getElementById('consecutive_failures').value);
     currentSettings.on_failure = document.getElementById('on_failure').value;
