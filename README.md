@@ -31,6 +31,8 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
    - Right-click to delete individual zones.
    - “Clear Masks” button for quick resets.
 
+![masking](https://github.com/user-attachments/assets/018157ec-98e1-4d96-aeb0-8be1189f718a)
+
 - **Dual Thresholds**:
    - **Detection Threshold** (yellow): highlights possible issues.
    - **Trigger Threshold** (red): automatically pauses or cancels the print after a configurable number of retries.
