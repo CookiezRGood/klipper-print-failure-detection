@@ -14,6 +14,24 @@ log.disabled = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logging.info(">>> STARTING PLUGIN <<<")
 
+# In-memory rolling log for UI
+LOG_BUFFER = []
+LOG_LIMIT = 300
+
+class UILogHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+        except Exception:
+            msg = record.getMessage()
+        LOG_BUFFER.append(msg)
+        if len(LOG_BUFFER) > LOG_LIMIT:
+            LOG_BUFFER.pop(0)
+
+_ui_handler = UILogHandler()
+_ui_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+logging.getLogger().addHandler(_ui_handler)
+
 # Import TFLite Runtime
 try:
     import tflite_runtime.interpreter as tflite
@@ -41,15 +59,17 @@ default_config = {
     "consecutive_failures": 2,
     "on_failure": "pause",
     "aspect_ratio": "16:9",
-
-    # per-camera mask zones (normalized coordinates 0–1)
+    "exclusion": {
+        "enabled": False,
+        "top": 0,
+        "bottom": 0,
+        "left": 0,
+        "right": 0
+    },
     "masks": {
         "0": [],
         "1": []
-    },
-
-    # NEW — auto start toggle
-    "auto_enable": False
+    }
 }
 
 config = default_config.copy()
@@ -57,14 +77,14 @@ if os.path.exists(SETTINGS_FILE):
     try:
         with open(SETTINGS_FILE, 'r') as f:
             loaded = json.load(f)
+            if "camera_url" in loaded:
+                config["cameras"][0]["url"] = loaded["camera_url"]
             config.update(loaded)
-            if "masks" not in config:
-                config["masks"] = default_config["masks"]
-            if "auto_enable" not in config:       # ensure field exists
-                config["auto_enable"] = False
+            
+            if "exclusion" not in config:
+                config["exclusion"] = default_config["exclusion"]
     except Exception:
         pass
-
 
 def save_config_to_file():
     try:
@@ -72,7 +92,6 @@ def save_config_to_file():
             json.dump(config, f, indent=4)
     except Exception:
         pass
-
 
 state = {
     "status": "idle",
@@ -86,8 +105,6 @@ state = {
     }
 }
 
-
-# --- AI ENGINE (unchanged) ---
 interpreter = None
 input_details = None
 output_details = None
@@ -121,8 +138,6 @@ def load_model():
 
 ai_ready = load_model()
 
-
-# --- YOLO Post Processing (unchanged) ---
 def post_process_yolo(output_data, img_width, img_height, conf_threshold):
     if output_data.shape[1] < output_data.shape[2]:
         output = np.transpose(output_data[0])
@@ -171,7 +186,7 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
         class_ids.append(class_id)
 
     indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, 0.45)
-
+    
     final_results = []
     if len(indices) > 0:
         for i in indices.flatten():
@@ -180,11 +195,9 @@ def post_process_yolo(output_data, img_width, img_height, conf_threshold):
                 "conf": confidences[i],
                 "class": class_ids[i]
             })
-
+            
     return final_results
 
-
-# --- Inference (unchanged) ---
 def run_inference(image):
     if not ai_ready or interpreter is None:
         return 0.0, []
@@ -194,15 +207,14 @@ def run_inference(image):
         resized = cv2.resize(image, (input_width, input_height))
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         input_data = np.expand_dims(rgb, axis=0)
-
+        
         if input_details[0]['dtype'] == np.float32:
             input_data = (input_data.astype(np.float32) / 255.0)
         elif input_details[0]['dtype'] == np.uint8:
             input_data = input_data.astype(np.uint8)
-
+            
         interpreter.set_tensor(input_details[0]['index'], input_data)
         interpreter.invoke()
-
         output_data = interpreter.get_tensor(output_details[0]['index'])
 
         user_conf = float(config.get("warn_threshold", 0.3))
@@ -218,8 +230,6 @@ def run_inference(image):
         logging.error(f"Inference Error: {e}")
         return 0.0, []
 
-
-# --- API ROUTES (unchanged except settings update) ---
 @app.route('/api/action/start', methods=['POST', 'GET'])
 def action_start():
     state["monitoring_active"] = True
@@ -227,20 +237,17 @@ def action_start():
     logging.info("Monitoring STARTED")
     return jsonify({"success": True})
 
-
 @app.route('/api/action/stop', methods=['POST', 'GET'])
 def action_stop():
     state["monitoring_active"] = False
     logging.info("Monitoring STOPPED")
     return jsonify({"success": True})
 
-
 @app.route('/api/action/toggle_mask', methods=['POST'])
 def toggle_mask():
     data = request.json
     state["show_mask_overlay"] = data.get("show", False)
     return jsonify({"success": True})
-
 
 def get_printer_state():
     url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
@@ -252,7 +259,6 @@ def get_printer_state():
     except Exception:
         pass
     return "standby"
-
 
 def trigger_printer_action(reason="Failure"):
     if state["action_triggered"]:
@@ -271,33 +277,21 @@ def trigger_printer_action(reason="Failure"):
     except Exception:
         pass
 
-
-# ======================================================================
-# 🔥 BACKGROUND MONITOR (auto-start added, everything else unchanged)
-# ======================================================================
 def background_monitor():
     while True:
         try:
             klipper_state = get_printer_state()
-
-            # -----------------------------
-            # NEW: Auto-start logic
-            # -----------------------------
-            if config.get("auto_enable", False):
-                if klipper_state == "printing":
-                    state["monitoring_active"] = True
-                else:
-                    state["monitoring_active"] = False
-
-            # legacy/manual behavior preserved
-            should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
-
-            if klipper_state in ["complete", "cancelled", "error"]:
+            if klipper_state in ["complete", "error", "cancelled"]:
                 state["monitoring_active"] = False
+
+            should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
             max_frame_score = 0.0
             cam_limit = int(config.get("camera_count", 2))
 
+            excl = config.get("exclusion", {})
+            ex_enabled = excl.get("enabled", False)
+            
             masks_cfg = config.get("masks", {})
 
             for cam in config["cameras"]:
@@ -305,7 +299,7 @@ def background_monitor():
                 if cam_id >= cam_limit:
                     state["cameras"][cam_id]["score"] = 0.0
                     continue
-                if not cam["enabled"] or not cam["url"]:
+                if not cam["enabled"] or not cam["url"]: 
                     state["cameras"][cam_id]["score"] = 0.0
                     continue
 
@@ -318,17 +312,39 @@ def background_monitor():
                         debug_img = img.copy()
                         h, w = img.shape[:2]
 
+                        if ex_enabled:
+                            top_pct = float(excl.get("top", 0.0))
+                            bottom_pct = float(excl.get("bottom", 0.0))
+                            left_pct = float(excl.get("left", 0.0))
+                            right_pct = float(excl.get("right", 0.0))
+
+                            top_px = int(h * (top_pct / 100.0))
+                            bottom_px = int(h * (bottom_pct / 100.0))
+                            left_px = int(w * (left_pct / 100.0))
+                            right_px = int(w * (right_pct / 100.0))
+
+                            if top_px > 0:
+                                img[0:top_px, :] = 0
+                            if bottom_px > 0:
+                                img[h - bottom_px:h, :] = 0
+                            if left_px > 0:
+                                img[:, 0:left_px] = 0
+                            if right_px > 0:
+                                img[:, w - right_px:w] = 0
+
                         cam_key = str(cam_id)
                         zones = masks_cfg.get(cam_key, [])
 
-                        # Mask AI image
                         for z in zones:
                             try:
                                 zx = float(z.get("x", 0.0))
                                 zy = float(z.get("y", 0.0))
                                 zw = float(z.get("w", 0.0))
                                 zh = float(z.get("h", 0.0))
-                            except:
+                            except Exception:
+                                continue
+
+                            if zw <= 0 or zh <= 0:
                                 continue
 
                             mx = int(zx * w)
@@ -343,7 +359,6 @@ def background_monitor():
 
                             cv2.rectangle(img, (mx, my), (mx + mw, my + mh), (0, 0, 0), -1)
 
-                        # Visual overlay
                         if state["show_mask_overlay"] and zones:
                             overlay = debug_img.copy()
                             for z in zones:
@@ -352,7 +367,10 @@ def background_monitor():
                                     zy = float(z.get("y", 0.0))
                                     zw = float(z.get("w", 0.0))
                                     zh = float(z.get("h", 0.0))
-                                except:
+                                except Exception:
+                                    continue
+
+                                if zw <= 0 or zh <= 0:
                                     continue
 
                                 mx = int(zx * w)
@@ -367,7 +385,8 @@ def background_monitor():
 
                                 cv2.rectangle(overlay, (mx, my), (mx + mw, my + mh), (255, 0, 255), -1)
 
-                            cv2.addWeighted(overlay, 0.2, debug_img, 0.8, 0, debug_img)
+                            alpha = 0.2
+                            cv2.addWeighted(overlay, alpha, debug_img, 1.0 - alpha, 0, debug_img)
 
                         if not should_run:
                             state["cameras"][cam_id]["frame"] = debug_img
@@ -387,13 +406,18 @@ def background_monitor():
                                 box_color = (0, 0, 255) if conf >= trigger_thresh else (0, 255, 255)
                                 text_color = (255, 255, 255) if conf >= trigger_thresh else (0, 0, 0)
 
+                                h_img, w_img = debug_img.shape[:2]
+                                x = max(0, min(x, w_img))
+                                y = max(0, min(y, h_img))
+                                w_box = max(0, min(w_box, w_img - x))
+                                h_box = max(0, min(h_box, h_img - y))
+
                                 cv2.rectangle(debug_img, (x, y), (x + w_box, y + h_box), box_color, 2)
 
                                 text = f"{label} {int(conf*100)}%"
-                                (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-
+                                (tw, th), _ = cv2.getTextSize(text,
+                                                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
                                 text_y = y + th + 5 if y < 20 else y - 5
-
                                 cv2.rectangle(debug_img,
                                               (x, text_y - th - 2),
                                               (x + tw, text_y + 2),
@@ -410,7 +434,6 @@ def background_monitor():
                 except Exception:
                     pass
 
-            # State core logic
             if not should_run:
                 state["status"] = "idle"
                 state["failure_count"] = 0
@@ -421,41 +444,35 @@ def background_monitor():
             state["status"] = "monitoring"
             max_retries = int(config["consecutive_failures"])
             threshold = float(config.get("ai_threshold", 0.5))
-
+            
             if max_frame_score > threshold:
                 if state["failure_count"] < max_retries:
                     state["failure_count"] += 1
-
+                
                 logging.info(f"ALERT: Failure {max_frame_score:.2f} | Count: {state['failure_count']}")
-
+                
                 if state["failure_count"] >= max_retries:
                     state["status"] = "failure_detected"
                     trigger_printer_action(reason="AI Detection")
-
             else:
                 if state["failure_count"] > 0:
                     state["failure_count"] -= 1
 
         except Exception as e:
             logging.error(f"Loop Error: {e}")
-
+        
         time.sleep(float(config["check_interval"]) / 1000.0)
-
 
 monitor_thread = threading.Thread(target=background_monitor, daemon=True)
 monitor_thread.start()
 
-
-# --- UI Routes (unchanged) ---
 @app.route('/')
 def serve_index():
     return send_from_directory('web_interface', 'index.html')
 
-
 @app.route('/<path:path>')
 def serve_static(path):
     return send_from_directory('web_interface', path)
-
 
 @app.route('/api/settings', methods=['GET', 'POST'])
 def settings():
@@ -464,7 +481,6 @@ def settings():
         save_config_to_file()
         return jsonify({"status": "saved", "config": config})
     return jsonify(config)
-
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
@@ -476,18 +492,20 @@ def get_status():
         "max_retries": config["consecutive_failures"]
     })
 
+@app.route('/api/logs', methods=['GET'])
+def get_logs():
+    return jsonify({"logs": "\n".join(LOG_BUFFER)})
 
 @app.route('/api/frame/<int:cam_id>')
 def get_frame(cam_id):
     if cam_id not in state["cameras"] or state["cameras"][cam_id]["frame"] is None:
         blank = np.zeros((360, 640, 3), np.uint8)
         cv2.putText(blank, "NO SIGNAL / DISABLED", (50, 180),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 100, 100), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (100,100,100), 2)
         _, buffer = cv2.imencode('.jpg', blank)
         return Response(buffer.tobytes(), mimetype='image/jpeg')
     _, buffer = cv2.imencode('.jpg', state["cameras"][cam_id]["frame"])
     return Response(buffer.tobytes(), mimetype='image/jpeg')
-
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=7126, threaded=True)
