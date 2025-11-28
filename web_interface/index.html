@@ -112,7 +112,7 @@
                     <label>Detection Threshold (%):</label>
                     <input type="number" id="warn_threshold" step="5" min="0" max="100">
                 </div>
-                <p class="help-text">Shows yellow warning box if detection is above this (0 - 100).</p>
+                <p class="help-text">Shows yellow warning if detection is above this (0 - 100).</p>
 
                 <div class="setting-row">
                     <label>Trigger Threshold (%):</label>
@@ -122,29 +122,40 @@
 
             </div>
             
+            <!-- UPDATED MASK SYSTEM -->
             <div class="setting-group">
                 <h4>Exclusion Mask</h4>
+
                 <div class="setting-row">
                     <label>Enable Mask:</label>
-                    <input type="checkbox" id="ex_enabled" style="width: auto;">
+                    <input type="checkbox" id="ex_enabled" style="width:auto;">
                 </div>
+
                 <div class="setting-row">
-                    <label>X Position (%):</label>
-                    <input type="number" id="ex_x" step="5" min="0" max="100">
+                    <label>Left (%):</label>
+                    <input type="range" id="ex_left" min="0" max="100" step="1">
+                    <span id="ex_left_val" class="range-val">0%</span>
                 </div>
+
                 <div class="setting-row">
-                    <label>Y Position (%):</label>
-                    <input type="number" id="ex_y" step="5" min="0" max="100">
+                    <label>Right (%):</label>
+                    <input type="range" id="ex_right" min="0" max="100" step="1">
+                    <span id="ex_right_val" class="range-val">0%</span>
                 </div>
+
                 <div class="setting-row">
-                    <label>Width (%):</label>
-                    <input type="number" id="ex_w" step="5" min="0" max="100">
+                    <label>Top (%):</label>
+                    <input type="range" id="ex_top" min="0" max="100" step="1">
+                    <span id="ex_top_val" class="range-val">0%</span>
                 </div>
+
                 <div class="setting-row">
-                    <label>Height (%):</label>
-                    <input type="number" id="ex_h" step="5" min="0" max="100">
+                    <label>Bottom (%):</label>
+                    <input type="range" id="ex_bottom" min="0" max="100" step="1">
+                    <span id="ex_bottom_val" class="range-val">0%</span>
                 </div>
-                <p class="help-text">Blacks out this area so the AI ignores it. Use 'Visualize Mask' on dashboard to see it.</p>
+
+                <p class="help-text">These sliders define edges of an ignored rectangle. Use “Visualize Mask”.</p>
             </div>
 
             <div class="setting-group">
@@ -167,6 +178,7 @@
                 </div>
             </div>
         </div>
+
         <div class="modal-footer">
             <button id="save-settings-btn" class="primary-btn">Save Configuration</button>
         </div>
