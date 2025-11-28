@@ -59,6 +59,7 @@
             </div>
 
             <div class="controls">
+                <button id="mask-toggle-btn" class="secondary-btn">Visualize Mask</button>
                 <button id="force-start-btn" class="primary-btn btn-success">▶ Start Monitoring</button>
                 <button id="open-settings-btn" class="secondary-btn">⚙️ Settings</button>
             </div>
@@ -97,10 +98,6 @@
                         <option value="4:3">4:3 (Standard)</option>
                     </select>
                 </div>
-                <div class="setting-row">
-                    <label>Moonraker URL:</label>
-                    <input type="text" id="moonraker_url" placeholder="[http://127.0.0.1:7125](http://127.0.0.1:7125)">
-                </div>
             </div>
 
             <div class="setting-group">
@@ -124,6 +121,31 @@
                 <p class="help-text">Triggers 'On Failure' action if above this (0 - 100).</p>
 
             </div>
+            
+            <div class="setting-group">
+                <h4>Exclusion Mask</h4>
+                <div class="setting-row">
+                    <label>Enable Mask:</label>
+                    <input type="checkbox" id="ex_enabled" style="width: auto;">
+                </div>
+                <div class="setting-row">
+                    <label>X Position (%):</label>
+                    <input type="number" id="ex_x" step="5" min="0" max="100">
+                </div>
+                <div class="setting-row">
+                    <label>Y Position (%):</label>
+                    <input type="number" id="ex_y" step="5" min="0" max="100">
+                </div>
+                <div class="setting-row">
+                    <label>Width (%):</label>
+                    <input type="number" id="ex_w" step="5" min="0" max="100">
+                </div>
+                <div class="setting-row">
+                    <label>Height (%):</label>
+                    <input type="number" id="ex_h" step="5" min="0" max="100">
+                </div>
+                <p class="help-text">Blacks out this area so the AI ignores it. Use 'Visualize Mask' on dashboard to see it.</p>
+            </div>
 
             <div class="setting-group">
                 <h4>Actions</h4>
@@ -138,6 +160,10 @@
                         <option value="pause">Pause Print</option>
                         <option value="cancel">Cancel Print</option>
                     </select>
+                </div>
+                <div class="setting-row">
+                    <label>Moonraker URL:</label>
+                    <input type="text" id="moonraker_url" placeholder="http://127.0.0.1:7125">
                 </div>
             </div>
         </div>
