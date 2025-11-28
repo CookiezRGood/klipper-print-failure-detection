@@ -53,6 +53,12 @@ h2 { margin: 0; font-weight: 600; color: #fff; }
     justify-content: center;
 }
 
+/* Reduce viewport height when only 1 camera is shown */
+.camera-grid.single-mode .camera-card .camera-viewport {
+    max-height: 55vh;
+    overflow: hidden;
+}
+
 .camera-grid.single-mode .camera-card {
     max-width: 800px; /* Prevent it from stretching too wide */
     flex: 0 0 100%; /* Force full width within max-width */
