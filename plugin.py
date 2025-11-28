@@ -319,7 +319,7 @@ def background_monitor():
                 
                 if state["failure_count"] >= max_retries:
                     state["status"] = "failure_detected"
-                    trigger_printer_action(reason="AI Detection")
+                    trigger_printer_action(reason="POTENTIAL FAILURE")
             else:
                 if state["failure_count"] > 0: state["failure_count"] -= 1
 
