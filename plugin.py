@@ -1,266 +1,493 @@
-import json
+import logging
 import threading
 import time
-import base64
-import io
-from PIL import Image, ImageDraw
-from flask import Flask, request, jsonify, send_file
-import requests
 import cv2
 import numpy as np
+import requests
+import json
 import os
+from flask import Flask, jsonify, request, Response, send_from_directory
 
-app = Flask(__name__)
+# --- LOGGING ---
+log = logging.getLogger('werkzeug')
+log.disabled = True
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.info(">>> STARTING PLUGIN <<<")
 
-SETTINGS_FILE = "user_settings.json"
+# Import TFLite Runtime
+try:
+    import tflite_runtime.interpreter as tflite
+except ImportError:
+    logging.warning("CRITICAL: tflite-runtime not found. AI will not work.")
+    tflite = None
 
-DEFAULT_CONFIG = {
-    "camera_count": 2,
+app = Flask(__name__, static_folder='web_interface')
+
+SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'user_settings.json')
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.tflite')
+
+CLASS_NAMES = ["Spaghetti", "Stringing", "Zits"]
+
+default_config = {
     "cameras": [
-        {"url": "", "enabled": True},
-        {"url": "", "enabled": True}
+        {"id": 0, "name": "Primary", "url": "http://127.0.0.1/webcam/?action=snapshot", "enabled": True},
+        {"id": 1, "name": "Secondary", "url": "", "enabled": False}
     ],
+    "camera_count": 2,
     "moonraker_url": "http://127.0.0.1:7125",
     "check_interval": 500,
     "warn_threshold": 0.30,
     "ai_threshold": 0.50,
-    "consecutive_failures": 3,
+    "consecutive_failures": 2,
     "on_failure": "pause",
-    "masks": {"0": [], "1": []},
     "aspect_ratio": "16:9",
-    "auto_enable": False  # NEW FEATURE
+
+    # per-camera mask zones (normalized coordinates 0–1)
+    "masks": {
+        "0": [],
+        "1": []
+    },
+
+    # NEW — auto start toggle
+    "auto_enable": False
 }
 
-monitor_state = {
+config = default_config.copy()
+if os.path.exists(SETTINGS_FILE):
+    try:
+        with open(SETTINGS_FILE, 'r') as f:
+            loaded = json.load(f)
+            config.update(loaded)
+            if "masks" not in config:
+                config["masks"] = default_config["masks"]
+            if "auto_enable" not in config:       # ensure field exists
+                config["auto_enable"] = False
+    except Exception:
+        pass
+
+
+def save_config_to_file():
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(config, f, indent=4)
+    except Exception:
+        pass
+
+
+state = {
     "status": "idle",
-    "score": 0.0,
-    "failures": 0,
-    "max_retries": DEFAULT_CONFIG["consecutive_failures"],
+    "failure_count": 0,
+    "action_triggered": False,
     "monitoring_active": False,
-    "show_mask": False
+    "show_mask_overlay": False,
+    "cameras": {
+        0: {"frame": None, "score": 0.0},
+        1: {"frame": None, "score": 0.0}
+    }
 }
 
-lock = threading.Lock()
 
+# --- AI ENGINE (unchanged) ---
+interpreter = None
+input_details = None
+output_details = None
+input_height = 640
+input_width = 640
+input_dtype = np.float32
 
-# Load / Save settings -----------------------------------------
-
-def load_settings():
-    if not os.path.exists(SETTINGS_FILE):
-        save_settings(DEFAULT_CONFIG)
-        return DEFAULT_CONFIG
+def load_model():
+    global interpreter, input_details, output_details, input_height, input_width, input_dtype
+    if not os.path.exists(MODEL_PATH):
+        logging.error(f"CRITICAL: model.tflite NOT FOUND at {MODEL_PATH}")
+        return False
+    
     try:
-        with open(SETTINGS_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return DEFAULT_CONFIG
+        interpreter = tflite.Interpreter(model_path=MODEL_PATH)
+        interpreter.allocate_tensors()
+        
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+        
+        input_shape = input_details[0]['shape']
+        input_height = input_shape[1]
+        input_width = input_shape[2]
+        input_dtype = input_details[0]['dtype']
+        
+        logging.info(f"TFLite Model Loaded. Shape: {input_shape}")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to load TFLite: {e}")
+        return False
+
+ai_ready = load_model()
 
 
-def save_settings(cfg):
-    with open(SETTINGS_FILE, "w") as f:
-        json.dump(cfg, f, indent=4)
+# --- YOLO Post Processing (unchanged) ---
+def post_process_yolo(output_data, img_width, img_height, conf_threshold):
+    if output_data.shape[1] < output_data.shape[2]:
+        output = np.transpose(output_data[0])
+    else:
+        output = output_data[0]
+
+    boxes = []
+    confidences = []
+    class_ids = []
+
+    sample_coords = output[:, :4].flatten()
+    is_normalized = np.max(sample_coords) <= 1.5
+    
+    if is_normalized:
+        x_factor = img_width
+        y_factor = img_height
+    else:
+        x_factor = img_width / input_width
+        y_factor = img_height / input_height
+
+    scores = output[:, 4:]
+    max_scores = np.max(scores, axis=1)
+    max_indices = np.argmax(scores, axis=1)
+
+    valid_indices = np.where(max_scores >= conf_threshold)[0]
+
+    for i in valid_indices:
+        score = float(max_scores[i])
+        class_id = int(max_indices[i])
+        row = output[i]
+
+        cx, cy, w, h = row[0], row[1], row[2], row[3]
+
+        left = int((cx - w/2) * x_factor)
+        top = int((cy - h/2) * y_factor)
+        width = int(w * x_factor)
+        height = int(h * y_factor)
+
+        left = max(0, left)
+        top = max(0, top)
+        width = min(width, img_width - left)
+        height = min(height, img_height - top)
+
+        boxes.append([left, top, width, height])
+        confidences.append(score)
+        class_ids.append(class_id)
+
+    indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, 0.45)
+
+    final_results = []
+    if len(indices) > 0:
+        for i in indices.flatten():
+            final_results.append({
+                "box": boxes[i],
+                "conf": confidences[i],
+                "class": class_ids[i]
+            })
+
+    return final_results
 
 
-config = load_settings()
-
-
-# Camera Fetching ------------------------------------------------
-
-def fetch_image(cam_url):
-    if not cam_url:
-        return None
+# --- Inference (unchanged) ---
+def run_inference(image):
+    if not ai_ready or interpreter is None:
+        return 0.0, []
+    
     try:
-        resp = requests.get(cam_url, timeout=2)
-        img_bytes = resp.content
-        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-        return img
-    except:
-        return None
+        original_h, original_w = image.shape[:2]
+        resized = cv2.resize(image, (input_width, input_height))
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        input_data = np.expand_dims(rgb, axis=0)
+
+        if input_details[0]['dtype'] == np.float32:
+            input_data = (input_data.astype(np.float32) / 255.0)
+        elif input_details[0]['dtype'] == np.uint8:
+            input_data = input_data.astype(np.uint8)
+
+        interpreter.set_tensor(input_details[0]['index'], input_data)
+        interpreter.invoke()
+
+        output_data = interpreter.get_tensor(output_details[0]['index'])
+
+        user_conf = float(config.get("warn_threshold", 0.3))
+        detections = post_process_yolo(output_data, original_w, original_h, user_conf)
+
+        if not detections:
+            return 0.0, []
+
+        top_score = max(d['conf'] for d in detections)
+        return top_score, detections
+
+    except Exception as e:
+        logging.error(f"Inference Error: {e}")
+        return 0.0, []
 
 
-# Mask Overlay ----------------------------------------------------
-
-def apply_mask_overlay(img, mask_list):
-    if not mask_list:
-        return img
-
-    draw = ImageDraw.Draw(img, "RGBA")
-    w, h = img.size
-
-    for zone in mask_list:
-        x = int(zone["x"] * w)
-        y = int(zone["y"] * h)
-        ww = int(zone["w"] * w)
-        hh = int(zone["h"] * h)
-        draw.rectangle([x, y, x + ww, y + hh], fill=(255, 0, 255, 80))
-
-    return img
+# --- API ROUTES (unchanged except settings update) ---
+@app.route('/api/action/start', methods=['POST', 'GET'])
+def action_start():
+    state["monitoring_active"] = True
+    state["failure_count"] = 0
+    logging.info("Monitoring STARTED")
+    return jsonify({"success": True})
 
 
-# Background Monitoring Thread -----------------------------------
+@app.route('/api/action/stop', methods=['POST', 'GET'])
+def action_stop():
+    state["monitoring_active"] = False
+    logging.info("Monitoring STOPPED")
+    return jsonify({"success": True})
 
+
+@app.route('/api/action/toggle_mask', methods=['POST'])
+def toggle_mask():
+    data = request.json
+    state["show_mask_overlay"] = data.get("show", False)
+    return jsonify({"success": True})
+
+
+def get_printer_state():
+    url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
+    try:
+        r = requests.get(f"{url}/printer/objects/query?print_stats", timeout=0.5)
+        if r.status_code == 200:
+            data = r.json()
+            return data.get("result", {}).get("status", {}).get("print_stats", {}).get("state", "standby")
+    except Exception:
+        pass
+    return "standby"
+
+
+def trigger_printer_action(reason="Failure"):
+    if state["action_triggered"]:
+        return
+    action = config.get("on_failure", "nothing")
+    url = config.get("moonraker_url", "http://127.0.0.1:7125").rstrip('/')
+    logging.info(f"FAILURE CONFIRMED: {reason}. Action: {action}")
+    try:
+        console_msg = f"M118 >>> AI DETECTED {reason.upper()}! Action: {action.upper()} <<<"
+        requests.post(f"{url}/printer/gcode/script", json={"script": console_msg})
+        if action == "pause":
+            requests.post(f"{url}/printer/print/pause")
+        elif action == "cancel":
+            requests.post(f"{url}/printer/print/cancel")
+        state["action_triggered"] = True
+    except Exception:
+        pass
+
+
+# ======================================================================
+# 🔥 BACKGROUND MONITOR (auto-start added, everything else unchanged)
+# ======================================================================
 def background_monitor():
-    global config, monitor_state
-
     while True:
-        time.sleep(max(0.1, config.get("check_interval", 500) / 1000.0))
+        try:
+            klipper_state = get_printer_state()
 
-        with lock:
-            moonraker = config.get("moonraker_url", "http://127.0.0.1:7125")
-            try:
-                r = requests.get(f"{moonraker}/printer/objects/query?print_stats", timeout=2)
-                pr_state = r.json()["result"]["status"]["print_stats"]["state"]
-            except:
-                pr_state = "error"
+            # -----------------------------
+            # NEW: Auto-start logic
+            # -----------------------------
+            if config.get("auto_enable", False):
+                if klipper_state == "printing":
+                    state["monitoring_active"] = True
+                else:
+                    state["monitoring_active"] = False
 
-            auto_enable = config.get("auto_enable", False)
-            manual_active = monitor_state["monitoring_active"]
+            # legacy/manual behavior preserved
+            should_run = (klipper_state in ["printing", "paused"]) or state["monitoring_active"]
 
-            # Decide if monitoring should run -----------------------------------
-            if auto_enable:
-                # Only active WHILE printing (auto)
-                should_run = (pr_state == "printing")
-            else:
-                # Manual mode / previous logic
-                should_run = (pr_state in ["printing", "paused"]) or manual_active
+            if klipper_state in ["complete", "cancelled", "error"]:
+                state["monitoring_active"] = False
 
-            # Reset manual flag when not printing -------------------------------
-            if pr_state != "printing":
-                monitor_state["monitoring_active"] = False
+            max_frame_score = 0.0
+            cam_limit = int(config.get("camera_count", 2))
 
+            masks_cfg = config.get("masks", {})
+
+            for cam in config["cameras"]:
+                cam_id = cam["id"]
+                if cam_id >= cam_limit:
+                    state["cameras"][cam_id]["score"] = 0.0
+                    continue
+                if not cam["enabled"] or not cam["url"]:
+                    state["cameras"][cam_id]["score"] = 0.0
+                    continue
+
+                try:
+                    resp = requests.get(cam["url"], timeout=2)
+                    if resp.status_code == 200:
+                        arr = np.frombuffer(resp.content, np.uint8)
+                        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+                        debug_img = img.copy()
+                        h, w = img.shape[:2]
+
+                        cam_key = str(cam_id)
+                        zones = masks_cfg.get(cam_key, [])
+
+                        # Mask AI image
+                        for z in zones:
+                            try:
+                                zx = float(z.get("x", 0.0))
+                                zy = float(z.get("y", 0.0))
+                                zw = float(z.get("w", 0.0))
+                                zh = float(z.get("h", 0.0))
+                            except:
+                                continue
+
+                            mx = int(zx * w)
+                            my = int(zy * h)
+                            mw = int(zw * w)
+                            mh = int(zh * h)
+
+                            mx = max(0, min(mx, w-1))
+                            my = max(0, min(my, h-1))
+                            mw = max(1, min(mw, w - mx))
+                            mh = max(1, min(mh, h - my))
+
+                            cv2.rectangle(img, (mx, my), (mx + mw, my + mh), (0, 0, 0), -1)
+
+                        # Visual overlay
+                        if state["show_mask_overlay"] and zones:
+                            overlay = debug_img.copy()
+                            for z in zones:
+                                try:
+                                    zx = float(z.get("x", 0.0))
+                                    zy = float(z.get("y", 0.0))
+                                    zw = float(z.get("w", 0.0))
+                                    zh = float(z.get("h", 0.0))
+                                except:
+                                    continue
+
+                                mx = int(zx * w)
+                                my = int(zy * h)
+                                mw = int(zw * w)
+                                mh = int(zh * h)
+
+                                mx = max(0, min(mx, w-1))
+                                my = max(0, min(my, h-1))
+                                mw = max(1, min(mw, w - mx))
+                                mh = max(1, min(mh, h - my))
+
+                                cv2.rectangle(overlay, (mx, my), (mx + mw, my + mh), (255, 0, 255), -1)
+
+                            cv2.addWeighted(overlay, 0.2, debug_img, 0.8, 0, debug_img)
+
+                        if not should_run:
+                            state["cameras"][cam_id]["frame"] = debug_img
+                            state["cameras"][cam_id]["score"] = 0.0
+                            continue
+
+                        if ai_ready:
+                            score, detections = run_inference(img)
+                            trigger_thresh = float(config.get("ai_threshold", 0.5))
+
+                            for d in detections:
+                                x, y, w_box, h_box = d['box']
+                                cls_id = d['class']
+                                conf = d['conf']
+                                label = CLASS_NAMES[cls_id] if cls_id < len(CLASS_NAMES) else "Failure"
+
+                                box_color = (0, 0, 255) if conf >= trigger_thresh else (0, 255, 255)
+                                text_color = (255, 255, 255) if conf >= trigger_thresh else (0, 0, 0)
+
+                                cv2.rectangle(debug_img, (x, y), (x + w_box, y + h_box), box_color, 2)
+
+                                text = f"{label} {int(conf*100)}%"
+                                (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+
+                                text_y = y + th + 5 if y < 20 else y - 5
+
+                                cv2.rectangle(debug_img,
+                                              (x, text_y - th - 2),
+                                              (x + tw, text_y + 2),
+                                              box_color, -1)
+                                cv2.putText(debug_img, text, (x, text_y),
+                                            cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                            text_color, 1)
+
+                            state["cameras"][cam_id]["frame"] = debug_img
+                            state["cameras"][cam_id]["score"] = score
+                            if score > max_frame_score:
+                                max_frame_score = score
+
+                except Exception:
+                    pass
+
+            # State core logic
             if not should_run:
-                monitor_state["status"] = "idle"
-                monitor_state["score"] = 0.0
-                monitor_state["failures"] = 0
+                state["status"] = "idle"
+                state["failure_count"] = 0
+                state["action_triggered"] = False
+                time.sleep(1)
                 continue
 
-            monitor_state["status"] = "monitoring"
+            state["status"] = "monitoring"
+            max_retries = int(config["consecutive_failures"])
+            threshold = float(config.get("ai_threshold", 0.5))
 
-        # PROCESS ALL ENABLED CAMERAS -----------------------------------------
-        worst_score = 0.0
-        failure_detected = False
+            if max_frame_score > threshold:
+                if state["failure_count"] < max_retries:
+                    state["failure_count"] += 1
 
-        for cam_id, cam in enumerate(config["cameras"]):
-            if not cam["enabled"]:
-                continue
+                logging.info(f"ALERT: Failure {max_frame_score:.2f} | Count: {state['failure_count']}")
 
-            img = fetch_image(cam["url"])
-            if img is None:
-                continue
+                if state["failure_count"] >= max_retries:
+                    state["status"] = "failure_detected"
+                    trigger_printer_action(reason="AI Detection")
 
-            # Convert to OpenCV
-            cv_img = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-
-            # Dummy detection calculation
-            fail_score = float(np.mean(cv_img)) / 255.0
-
-            if fail_score > worst_score:
-                worst_score = fail_score
-
-            if fail_score >= config.get("ai_threshold", 0.50):
-                failure_detected = True
-
-        with lock:
-            monitor_state["score"] = worst_score
-
-            warn_t = config.get("warn_threshold", 0.30)
-            fail_t = config.get("ai_threshold", 0.50)
-
-            if failure_detected:
-                monitor_state["failures"] += 1
             else:
-                monitor_state["failures"] = 0
+                if state["failure_count"] > 0:
+                    state["failure_count"] -= 1
 
-            max_r = config.get("consecutive_failures", 3)
-            monitor_state["max_retries"] = max_r
+        except Exception as e:
+            logging.error(f"Loop Error: {e}")
 
-            if monitor_state["failures"] >= max_r:
-                monitor_state["status"] = "failure_detected"
-                if config.get("on_failure") == "pause":
-                    try:
-                        requests.post(f"{moonraker}/printer/print/pause")
-                    except:
-                        pass
-                elif config.get("on_failure") == "cancel":
-                    try:
-                        requests.post(f"{moonraker}/printer/print/cancel")
-                    except:
-                        pass
-
-                monitor_state["monitoring_active"] = False
+        time.sleep(float(config["check_interval"]) / 1000.0)
 
 
-threading.Thread(target=background_monitor, daemon=True).start()
+monitor_thread = threading.Thread(target=background_monitor, daemon=True)
+monitor_thread.start()
 
 
-# API ROUTES -------------------------------------------------------
-
-@app.route("/api/status")
-def api_status():
-    with lock:
-        return jsonify(monitor_state)
+# --- UI Routes (unchanged) ---
+@app.route('/')
+def serve_index():
+    return send_from_directory('web_interface', 'index.html')
 
 
-@app.route("/api/frame/<cam_id>")
-def api_frame(cam_id):
-    cam_id = int(cam_id)
-
-    if cam_id >= len(config["cameras"]):
-        return "", 404
-
-    cam = config["cameras"][cam_id]
-    img = fetch_image(cam["url"])
-    if img is None:
-        return "", 404
-
-    if monitor_state["show_mask"]:
-        mask_list = config.get("masks", {}).get(str(cam_id), [])
-        img = apply_mask_overlay(img, mask_list)
-
-    buf = io.BytesIO()
-    img.save(buf, format='JPEG')
-    buf.seek(0)
-
-    return send_file(buf, mimetype='image/jpeg')
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory('web_interface', path)
 
 
-@app.route("/api/settings", methods=["GET", "POST"])
-def api_settings():
-    global config
-    if request.method == "POST":
-        new_cfg = request.json
-        config = new_cfg
-        save_settings(config)
-        return jsonify({"ok": True})
-
+@app.route('/api/settings', methods=['GET', 'POST'])
+def settings():
+    if request.method == 'POST':
+        config.update(request.json)
+        save_config_to_file()
+        return jsonify({"status": "saved", "config": config})
     return jsonify(config)
 
 
-@app.route("/api/action/start", methods=["POST"])
-def api_start():
-    with lock:
-        monitor_state["monitoring_active"] = True
-        monitor_state["failures"] = 0
-        monitor_state["status"] = "monitoring"
-    return jsonify({"ok": True})
+@app.route('/api/status', methods=['GET'])
+def get_status():
+    max_score = max(state["cameras"][0]["score"], state["cameras"][1]["score"])
+    return jsonify({
+        "status": state["status"],
+        "score": max_score,
+        "failures": state["failure_count"],
+        "max_retries": config["consecutive_failures"]
+    })
 
 
-@app.route("/api/action/stop", methods=["POST"])
-def api_stop():
-    with lock:
-        monitor_state["monitoring_active"] = False
-        monitor_state["status"] = "idle"
-        monitor_state["failures"] = 0
-    return jsonify({"ok": True})
-
-
-@app.route("/api/action/toggle_mask", methods=["POST"])
-def api_toggle_mask():
-    data = request.json
-    show = data.get("show", False)
-    monitor_state["show_mask"] = show
-    return jsonify({"ok": True})
+@app.route('/api/frame/<int:cam_id>')
+def get_frame(cam_id):
+    if cam_id not in state["cameras"] or state["cameras"][cam_id]["frame"] is None:
+        blank = np.zeros((360, 640, 3), np.uint8)
+        cv2.putText(blank, "NO SIGNAL / DISABLED", (50, 180),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 100, 100), 2)
+        _, buffer = cv2.imencode('.jpg', blank)
+        return Response(buffer.tobytes(), mimetype='image/jpeg')
+    _, buffer = cv2.imencode('.jpg', state["cameras"][cam_id]["frame"])
+    return Response(buffer.tobytes(), mimetype='image/jpeg')
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=7126, debug=False)
+    app.run(host='0.0.0.0', port=7126, threaded=True)
