@@ -401,7 +401,7 @@ dialog#settings-modal {
     margin: 0 auto 8px auto;
 }
 
-/* Floating log panel */
+/* --- ADDED: FLOATING LOG PANEL --- */
 
 .log-floating-btn {
     position: fixed;
