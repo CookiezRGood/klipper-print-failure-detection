@@ -17,6 +17,8 @@ const cam1Card = document.getElementById('card-cam1');
 const cam2Card = document.getElementById('card-cam2');
 const cam1Toggle = document.getElementById('cam1-toggle');
 const cam2Toggle = document.getElementById('cam2-toggle');
+const cam1View = document.getElementById('cam1-container');
+const cam2View = document.getElementById('cam2-container');
 
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
@@ -24,17 +26,16 @@ function startImageLoop(rate) {
     
     imageInterval = setInterval(() => {
         const timestamp = new Date().getTime();
-        if (cam1Card && !cam1Card.classList.contains('disabled')) {
+        if (!cam1Card.classList.contains('disabled')) {
             cam1Img.src = `/api/frame/0?t=${timestamp}`;
         }
-        if (cam2Card && !cam2Card.classList.contains('disabled')) {
+        if (!cam2Card.classList.contains('disabled')) {
             cam2Img.src = `/api/frame/1?t=${timestamp}`;
         }
     }, safeRate);
 }
 
 async function toggleCamera(id, isEnabled) {
-    // Safety
     if (!cam1Card) return;
 
     const card = id === 0 ? cam1Card : cam2Card;
@@ -131,6 +132,7 @@ if(forceStartBtn) {
     });
 }
 
+// --- MASK TOGGLE ---
 if(maskToggleBtn) {
     maskToggleBtn.addEventListener('click', async () => {
         isMaskVisible = !isMaskVisible;
@@ -160,12 +162,12 @@ function applyLayout(count) {
     if (isSingle) {
         cameraGrid.classList.add('single-mode');
         cam2Card.classList.add('hidden');
-        document.getElementById('card-cam1').querySelector('.cam-controls').style.display = 'none';
+        cam1Card.querySelector('.cam-controls').style.display = 'none';
         if(cam2Row) cam2Row.style.display = 'none';
     } else {
         cameraGrid.classList.remove('single-mode');
         cam2Card.classList.remove('hidden');
-        document.getElementById('card-cam1').querySelector('.cam-controls').style.display = 'flex';
+        cam1Card.querySelector('.cam-controls').style.display = 'flex';
         if(cam2Row) cam2Row.style.display = ''; 
     }
 }
@@ -192,13 +194,13 @@ async function loadSettings() {
             document.getElementById('warn_threshold').value = Math.round((currentSettings.warn_threshold || 0.30) * 100);
             document.getElementById('ai_threshold').value = Math.round((currentSettings.ai_threshold || 0.50) * 100);
             
-            // NEW EDGE MASK SETTINGS
-            const edges = currentSettings.mask_edges || { enabled: false, top: 0, bottom: 0, left: 0, right: 0 };
-            document.getElementById('edge_mask_enabled').checked = edges.enabled;
-            document.getElementById('mask_top').value = edges.top;
-            document.getElementById('mask_bottom').value = edges.bottom;
-            document.getElementById('mask_left').value = edges.left;
-            document.getElementById('mask_right').value = edges.right;
+            // LOAD EXCLUSION SETTINGS
+            const excl = currentSettings.exclusion || { enabled: false, x: 0, y: 0, w: 20, h: 20 };
+            document.getElementById('ex_enabled').checked = excl.enabled;
+            document.getElementById('ex_x').value = excl.x;
+            document.getElementById('ex_y').value = excl.y;
+            document.getElementById('ex_w').value = excl.w;
+            document.getElementById('ex_h').value = excl.h;
 
             document.getElementById('consecutive_failures').value = currentSettings.consecutive_failures;
             document.getElementById('on_failure').value = currentSettings.on_failure || "nothing";
@@ -236,13 +238,13 @@ if (document.getElementById('open-settings-btn')) {
         currentSettings.warn_threshold = parseInt(document.getElementById('warn_threshold').value) / 100.0;
         currentSettings.ai_threshold = parseInt(document.getElementById('ai_threshold').value) / 100.0;
         
-        // SAVE EDGE MASK
-        currentSettings.mask_edges = {
-            enabled: document.getElementById('edge_mask_enabled').checked,
-            top: parseInt(document.getElementById('mask_top').value),
-            bottom: parseInt(document.getElementById('mask_bottom').value),
-            left: parseInt(document.getElementById('mask_left').value),
-            right: parseInt(document.getElementById('mask_right').value)
+        // SAVE EXCLUSION SETTINGS
+        currentSettings.exclusion = {
+            enabled: document.getElementById('ex_enabled').checked,
+            x: parseInt(document.getElementById('ex_x').value),
+            y: parseInt(document.getElementById('ex_y').value),
+            w: parseInt(document.getElementById('ex_w').value),
+            h: parseInt(document.getElementById('ex_h').value)
         };
         
         currentSettings.consecutive_failures = parseInt(document.getElementById('consecutive_failures').value);
@@ -268,3 +270,7 @@ if (document.getElementById('open-settings-btn')) {
 }
 
 loadSettings();
+```
+
+### 4. `style.css` (Unchanged)
+Reuse your current style file. It already has all the necessary classes.
