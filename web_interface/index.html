@@ -100,31 +100,29 @@
                 </div>
             </div>
             
-            <!-- NEW: EDGE MASK SETTINGS -->
             <div class="setting-group">
-                <h4>Masking (Ignore Edges)</h4>
+                <h4>Exclusion Mask</h4>
                 <div class="setting-row">
-                    <label>Enable Masking:</label>
-                    <input type="checkbox" id="edge_mask_enabled" style="width:auto;">
-                </div>
-                <p class="help-text">Blacks out edges of the image to hide cables or background.</p>
-                
-                <div class="setting-row">
-                    <label>Cut Top (%):</label>
-                    <input type="number" id="mask_top" step="5" min="0" max="50">
+                    <label>Enable Mask:</label>
+                    <input type="checkbox" id="ex_enabled" style="width: auto;">
                 </div>
                 <div class="setting-row">
-                    <label>Cut Bottom (%):</label>
-                    <input type="number" id="mask_bottom" step="5" min="0" max="50">
+                    <label>X Position (%):</label>
+                    <input type="number" id="ex_x" step="5" min="0" max="100">
                 </div>
                 <div class="setting-row">
-                    <label>Cut Left (%):</label>
-                    <input type="number" id="mask_left" step="5" min="0" max="50">
+                    <label>Y Position (%):</label>
+                    <input type="number" id="ex_y" step="5" min="0" max="100">
                 </div>
                 <div class="setting-row">
-                    <label>Cut Right (%):</label>
-                    <input type="number" id="mask_right" step="5" min="0" max="50">
+                    <label>Width (%):</label>
+                    <input type="number" id="ex_w" step="5" min="0" max="100">
                 </div>
+                <div class="setting-row">
+                    <label>Height (%):</label>
+                    <input type="number" id="ex_h" step="5" min="0" max="100">
+                </div>
+                <p class="help-text">Area to black out (ignore) in the camera view.</p>
             </div>
 
             <div class="setting-group">
@@ -139,10 +137,14 @@
                     <label>Detection Threshold (%):</label>
                     <input type="number" id="warn_threshold" step="5" min="0" max="100">
                 </div>
+                <p class="help-text">Shows yellow warning box if detection is above this (0 - 100).</p>
+
                 <div class="setting-row">
                     <label>Trigger Threshold (%):</label>
                     <input type="number" id="ai_threshold" step="5" min="0" max="100">
                 </div>
+                <p class="help-text">Triggers 'On Failure' action if above this (0 - 100).</p>
+
                 <div class="setting-row">
                     <label>Moonraker URL:</label>
                     <input type="text" id="moonraker_url" placeholder="[http://127.0.0.1:7125](http://127.0.0.1:7125)">
