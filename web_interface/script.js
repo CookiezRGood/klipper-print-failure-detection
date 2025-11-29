@@ -19,6 +19,7 @@ const overlay = document.getElementById('settings-overlay');
 const mainContent = document.getElementById('main-content');
 
 const cameraGrid = document.getElementById('camera-grid');
+const autoEnableToggle = document.getElementById('auto-enable-toggle');
 
 // Camera references
 const cam1Img = document.getElementById('cam1-img');
@@ -61,6 +62,16 @@ if (cam2ClearBtn) {
         syncMasksToServer();
     });
 }
+
+autoEnableToggle.addEventListener('change', () => {
+    currentSettings.auto_enable = autoEnableToggle.checked;
+
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentSettings)
+    }).catch(() => {});
+});
 
 /********************************************************************
  * Image Loop
@@ -419,6 +430,10 @@ async function loadSettings() {
         // On failure
         document.getElementById('on_failure').value =
             currentSettings.on_failure || "pause";
+            
+        // Auto-enable toggle
+        autoEnableToggle.checked =
+            currentSettings.auto_enable !== false;
 
         // Masks
         const m = currentSettings.masks || {};
@@ -490,6 +505,8 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
 
     currentSettings.on_failure =
         document.getElementById('on_failure').value;
+        
+    currentSettings.auto_enable = autoEnableToggle.checked;
 
     currentSettings.masks = {
         "0": maskZones[0],
