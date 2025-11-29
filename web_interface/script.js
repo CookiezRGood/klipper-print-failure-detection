@@ -12,6 +12,7 @@ const confidenceBar = document.getElementById('confidence-bar');
 const forceStartBtn = document.getElementById('force-start-btn');
 const maskToggleBtn = document.getElementById('mask-toggle-btn');
 const settingsModal = document.getElementById('settings-modal');
+const overlay = document.getElementById('settings-overlay');
 
 const cameraGrid = document.getElementById('camera-grid');
 
@@ -471,10 +472,16 @@ async function loadSettings() {
 document.getElementById('open-settings-btn').addEventListener('click', () => {
     loadSettings();
     settingsModal.showModal();
+    settingsModal.classList.add('show');                 // slide in
+    overlay.classList.add('active');                     // show overlay
+    document.getElementById('main-content').classList.add('blurred'); // blur UI
 });
 
 document.getElementById('close-modal-x').addEventListener('click', () => {
+    settingsModal.classList.remove('show');
     settingsModal.close();
+    overlay.classList.remove('active');
+    document.getElementById('main-content').classList.remove('blurred');
 });
 
 /********************************************************************
@@ -531,7 +538,10 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     startImageLoop(currentSettings.check_interval);
 
     alert("Configuration Saved!");
+    settingsModal.classList.remove('show');
     settingsModal.close();
+    overlay.classList.remove('active');
+    document.getElementById('main-content').classList.remove('blurred');
 });
 
 /********************************************************************

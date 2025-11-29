@@ -25,6 +25,11 @@ body {
     padding: 16px 16px 80px 16px;
 }
 
+.blurred {
+    filter: blur(4px);
+    transition: filter 0.35s ease;
+}
+
 /* Header */
 
 header {
@@ -276,7 +281,7 @@ header h2 {
 .controls {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 14px;
 }
 
 .primary-btn,
@@ -384,6 +389,7 @@ dialog#settings-modal {
 .setting-group h4 {
     margin: 0 0 8px 0;
     font-size: 0.95rem;
+    color: #64b5f6;
 }
 
 .setting-row {
@@ -416,6 +422,34 @@ dialog#settings-modal {
     border-top: 1px solid var(--border-subtle);
     display: flex;
     justify-content: flex-end;
+}
+
+#settings-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    z-index: 3500;
+}
+
+#settings-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Slide-in animation for <dialog> */
+#settings-modal {
+    transform: translateY(-20px);
+    opacity: 0;
+    transition: transform 0.35s ease, opacity 0.35s ease;
+}
+
+#settings-modal.show {
+    transform: translateY(0);
+    opacity: 1;
 }
 
 /* Hidden class */
