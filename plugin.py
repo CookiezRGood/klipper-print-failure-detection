@@ -353,7 +353,8 @@ def background_monitor():
             # AUTO-ENABLE logic
             if config.get("auto_enable", False):
 
-                # Auto-enable only if user did NOT manually stop monitoring
+                # Auto-start only if not already monitoring and user
+                # didn't manually disable it during this print.
                 if (
                     klip_state == "printing"
                     and not state["monitoring_active"]
@@ -361,9 +362,9 @@ def background_monitor():
                 ):
                     logging.info("Auto-Enable: Print detected → Monitoring ON")
                     state["monitoring_active"] = True
-                    state["auto_enabled"] = True
+                    state["auto_enabled"] = True   # mark as auto-enabled
 
-                # Auto-disable at end of print (only if it was auto-enabled)
+                # Auto-stop only if monitoring was auto-enabled
                 if (
                     klip_state in ["complete", "cancelled", "standby"]
                     and state["auto_enabled"]
@@ -371,12 +372,9 @@ def background_monitor():
                     logging.info("Auto-Enable: Print ended → Monitoring OFF")
                     state["monitoring_active"] = False
                     state["auto_enabled"] = False
-                    state["user_disabled"] = False    # reset user disable for next print
+                    state["user_disabled"] = False   # reset for next print
 
-            should_run = (
-                state["monitoring_active"] or
-                klip_state in ["printing", "paused"]
-            )
+            ai_enabled = state["monitoring_active"]
 
             masks_cfg = config.get("masks", {})
             max_frame_score = 0.0
@@ -444,7 +442,7 @@ def background_monitor():
                             )
                             cv2.addWeighted(overlay, 0.20, debug, 0.80, 0, debug)
 
-                    if not should_run:
+                    if not ai_enabled:
                         state["cameras"][cam_id]["frame"] = debug
                         continue
 
@@ -484,7 +482,7 @@ def background_monitor():
                     logging.error(f"Camera {cam_id} error: {e}")
 
             # Status machine
-            if not should_run:
+            if not ai_enabled:
                 state["status"] = "idle"
                 state["failure_count"] = 0
                 state["action_triggered"] = False
