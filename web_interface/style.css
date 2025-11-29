@@ -15,7 +15,7 @@
 body {
     margin: 0;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background-color: #050505;
+    background-color: #0d0d0d;
     color: var(--text-main);
 }
 
