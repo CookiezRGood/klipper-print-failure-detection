@@ -10,8 +10,10 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 ## Prerequisites
 
-- Crowsnest (adding camera functionality)
+- Crowsnest (camera functionality)
    - https://github.com/mainsail-crew/crowsnest
+- Gcode Shell Commands (via kiauh; only needed for auto-start macro)
+   - https://github.com/dw-0/kiauh/tree/master
 
 ## Features
 
@@ -21,9 +23,9 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 <br><br>
 
-- **Real-time Dashboard**: View live camera feeds with bounding box overlays showing what the AI detects.
+- **Real-Time Web Dashboard**: View live camera feeds with bounding box overlays showing what the AI detects.
 
-<img width="1854" height="963" alt="image" src="https://github.com/user-attachments/assets/404b504d-29d1-44db-acf3-ca46a4d4a87a" />
+<img width="1852" height="962" alt="image" src="https://github.com/user-attachments/assets/52b18d96-7d69-4b79-b3e8-78f4c3f75725" />
 
 <br><br>
 
@@ -48,7 +50,7 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
    - Right-click to delete individual zones.
    - “Clear Masks” button for quick resets.
 
-![masking](https://github.com/user-attachments/assets/0042758a-11e9-45f8-bcfb-1e4ac639a1be)
+![masking](https://github.com/user-attachments/assets/c0bfe96e-2dd3-4e3f-9f32-8f80bde18cd5)
 
 <br><br>
 
@@ -56,7 +58,7 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 - **Manual Start Button**: Starts AI monitoring process (useful for testing and finding ideal detection percentages).
 
-- **Auto-Start Toggle**: Toggle switch to enable the plugin automatically starting when you start a print.
+- **Auto-Start Macro**: Provided macro can be inserted at the end of your `PRINT_START` to automatically enable the detection system (prevents high CPU usage during things like leveling and meshing).
 
 - **Live Plugin Logs**: View the logs for the plugin on the main dashboard to check for functionality and see errors.
 
@@ -76,6 +78,28 @@ Clone this repository to your printer and install:
 - Open the settings and input your printer camera ip (used in crowsnest).
 - Adjust any other settings to your preference with testing to make sure it works well for your setup.
    - The main testing you need to find is your ideal trigger threshold value. The detection threshold value can be anything as long as its lower than the detection threshold value.
+- Add the following macros to your printer to allow auto-starting of the plugin while printing:
+   - Place the `ENABLE_AI_MONITOR` and `DISABLE_AI_MONITOR` macros at the end of your `PRINT_START` and wherever you want in your `PRINT_END` macro.
+
+```bash
+[gcode_macro ENABLE_AI_MONITOR]
+gcode:
+    RUN_SHELL_COMMAND CMD=ai_monitor_enable
+    M118 AI Failure Detection Started
+
+[gcode_macro DISABLE_AI_MONITOR]
+gcode:
+    RUN_SHELL_COMMAND CMD=ai_monitor_disable
+    M118 AI Failure Detection Stopped
+
+[gcode_shell_command ai_monitor_enable]
+command: curl -X POST http://127.0.0.1:7126/api/action/start_from_macro
+timeout: 5
+
+[gcode_shell_command ai_monitor_disable]
+command: curl -X POST http://127.0.0.1:7126/api/action/stop
+timeout: 5
+```
 
 
 ## Automatic Updates
