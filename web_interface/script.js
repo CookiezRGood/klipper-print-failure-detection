@@ -53,12 +53,19 @@ function startImageLoop(rate) {
 
     imageInterval = setInterval(() => {
         const now = Date.now();
-        if (!cam1Card.classList.contains('disabled')) {
+        // When disabled, clear the feed entirely
+        if (cam1Card.classList.contains('disabled')) {
+            cam1Img.src = "";
+        } else {
             cam1Img.src = `/api/frame/0?cache_bust=${now}`;
         }
-        if (!cam2Card.classList.contains('disabled')) {
+
+        if (cam2Card.classList.contains('disabled')) {
+            cam2Img.src = "";
+        } else {
             cam2Img.src = `/api/frame/1?cache_bust=${now}`;
         }
+
     }, finalRate);
 }
 

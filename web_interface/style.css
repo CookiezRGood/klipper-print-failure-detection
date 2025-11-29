@@ -144,9 +144,13 @@ header h2 {
 }
 
 .camera-card.disabled .live-feed {
-    filter: grayscale(1);
-    opacity: 0.2;
+    display: none !important;
 }
+
+.camera-card.disabled .camera-viewport {
+    background: #0f0f0f !important; 
+}
+
 
 /* Camera controls */
 
