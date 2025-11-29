@@ -20,12 +20,17 @@ const cameraGrid = document.getElementById('camera-grid');
 const cam1Img = document.getElementById('cam1-live');
 const cam2Img = document.getElementById('cam2-live');
 
-// Prevent browser dragging of camera feed images
-cam1Img.setAttribute('draggable', 'false');
-cam2Img.setAttribute('draggable', 'false');
+[cam1Img, cam2Img].forEach(img => {
+    if (!img) return;
 
-cam1Img.addEventListener('mousedown', e => e.preventDefault());
-cam2Img.addEventListener('mousedown', e => e.preventDefault());
+    // Prevent browser/native dragging of camera feed images
+    img.setAttribute('draggable', 'false');
+    img.draggable = false;
+    img.style.pointerEvents = 'none';
+    img.style.userSelect = 'none';
+
+    img.addEventListener('mousedown', e => e.preventDefault());
+});
 
 const cam1Card = document.getElementById('card-cam1');
 const cam2Card = document.getElementById('card-cam2');
