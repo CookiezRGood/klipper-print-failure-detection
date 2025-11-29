@@ -460,8 +460,9 @@ def background_monitor():
                     # Run AI
                     score, dets = run_inference(img)
 
-                    # CATEGORY FILTERING (new)
+                    # CATEGORY FILTERING
                     categories = config.get("ai_categories", {})
+                    warn_thresh = float(config.get("warn_threshold", 0.3))
 
                     # Keep only detections for enabled categories
                     filtered_dets = []
@@ -514,21 +515,18 @@ def background_monitor():
                             "threshold": 0.5,
                         })
 
-                        # Decide colors (visual only)
-                        base_thresh = 0.5
-                        if not cat_cfg.get("enabled", True):
-                            continue
-                        else:
-                            box_color = (0, 0, 255) if conf >= base_thresh else (0, 255, 255)
-                            text_color = (255, 255, 255) if conf >= base_thresh else (0, 0, 0)
+                        # Per-category trigger threshold
+                        trig_thresh = float(cat_cfg.get("threshold", 0.5))
 
-                            # Failure contribution only from enabled + trigger categories
-                            if cat_cfg.get("trigger", False):
-                                trig_thresh = float(cat_cfg.get("threshold", base_thresh))
-                                if conf >= trig_thresh:
-                                    triggered_here = True
-                                    if conf > trigger_conf_here:
-                                        trigger_conf_here = conf
+                        # Decide color:
+                        # RED   = allowed to trigger & above trigger threshold
+                        # YELLOW = detected but below trigger threshold
+                        if cat_cfg.get("trigger", False) and conf >= trig_thresh:
+                            box_color = (0, 0, 255)      # red
+                            text_color = (255, 255, 255)
+                        else:
+                            box_color = (0, 255, 255)    # yellow
+                            text_color = (0, 0, 0)
 
                         # Draw detection
                         cv2.rectangle(debug, (x, y), (x+ww, y+hh), box_color, 2)
