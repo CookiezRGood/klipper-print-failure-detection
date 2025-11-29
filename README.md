@@ -31,7 +31,7 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 - **Comprehensive Settings Menu**: Many configurable aspects to tailor the plugin to your printer and environment.
 
-<img width="714" height="571" alt="image" src="https://github.com/user-attachments/assets/23e8e2e7-a8d5-4e4b-a084-b53f2a2b2501" />
+<img width="712" height="919" alt="image" src="https://github.com/user-attachments/assets/e85b393c-d8d1-4678-b5c7-366e8c2f7abd" />
 
 <br><br>
 
