@@ -114,7 +114,7 @@ state = {
     "failure_count": 0,
     "action_triggered": False,
     "monitoring_active": False,
-    "user_disabled": False,
+    "manual_override": False,
     "show_mask_overlay": False,
     "cameras": {
         0: {"frame": None, "score": 0.0},
@@ -269,17 +269,25 @@ def run_inference(image):
 def action_start():
     state["monitoring_active"] = True
     state["failure_count"] = 0
-    state["user_disabled"] = False
-    logging.info("Monitoring STARTED")
+    state["action_triggered"] = False
+    state["manual_override"] = True
+    logging.info("Monitoring STARTED (manual)")
     return jsonify({"success": True})
 
 @app.route("/api/action/stop", methods=["POST", "GET"])
 def action_stop():
     state["monitoring_active"] = False
-    state["user_disabled"] = True
-    logging.info("Monitoring STOPPED (manual)")
+    logging.info("Monitoring STOPPED")
     return jsonify({"success": True})
 
+@app.route("/api/action/start_from_macro", methods=["POST"])
+def action_start_from_macro():
+    state["monitoring_active"] = True
+    state["failure_count"] = 0
+    state["action_triggered"] = False
+    state["manual_override"] = False
+    logging.info("Monitoring STARTED (print start macro)")
+    return jsonify({"success": True})
 
 @app.route("/api/action/toggle_mask", methods=["POST"])
 def toggle_mask():
@@ -341,13 +349,12 @@ def background_monitor():
         try:
             klip_state = get_printer_state()
 
-            # Auto-disable when printer is NOT printing
-            if klip_state != "printing":
+            # Auto-disable only if NOT manually started
+            if klip_state != "printing" and not state["manual_override"]:
                 if state["monitoring_active"]:
                     logging.info("Printer not printing → Monitoring OFF")
                 state["monitoring_active"] = False
                 state["action_triggered"] = False
-                state["user_disabled"] = False   # reset for the next print
 
             # If printer just entered printing state, clear old flags
             if klip_state == "printing" and state.get("_last_state") != "printing":
