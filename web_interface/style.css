@@ -247,7 +247,28 @@ header h2 {
     inset: 0;
     width: 0%;
     background: var(--success);
-    transition: width 0.2s ease, background 0.2s ease;
+    opacity: 1;
+    transition:
+        width 0.4s ease,
+        background 0.3s ease,
+        opacity 0.5s ease;
+}
+
+.monitoring-label {
+    position: absolute;
+    width: 100%;
+    text-align: center;
+    top: -18px;
+    font-size: 0.75rem;
+    color: #bbb;
+    pointer-events: none;
+    opacity: 0;     /* default hidden */
+    transition: opacity 0.3s ease;
+}
+
+.health-section.dimmed {
+    opacity: 0.35;
+    transition: opacity 0.3s ease;
 }
 
 /* Controls */

@@ -158,6 +158,44 @@ async function updateStatus() {
         } else {
             statusBadge.style.backgroundColor = '#f39c12';
         }
+        
+        // RESET + FADE OUT FAILURE BAR WHEN MONITORING IS OFF
+        if (data.status !== 'monitoring' && data.status !== 'failure_detected') {
+
+            // fade out the bar
+            confidenceBar.style.opacity = "0";
+
+            // reset values after fade completes
+            setTimeout(() => {
+                confidenceBar.style.width = "0%";
+                confidenceBar.style.backgroundColor = "#4CAF50";
+                ssimText.innerText = "0%";
+                retryText.innerText = `0/${data.max_retries}`;
+            }, 400);
+
+            // show "Not Monitoring" label
+            const label = document.getElementById("monitoring-label");
+            label.textContent = "Not Monitoring";
+            label.style.opacity = "1";
+
+        } else {
+
+            // fade in the bar when monitoring resumes
+            confidenceBar.style.opacity = "1";
+
+            // hide label
+            const label = document.getElementById("monitoring-label");
+            label.style.opacity = "0";
+        }
+        
+        // DIM / UN-DIM HEALTH SECTION BASED ON MONITORING
+        const healthSection = document.querySelector('.health-section');
+
+        if (data.status !== 'monitoring' && data.status !== 'failure_detected') {
+            healthSection.classList.add('dimmed');
+        } else {
+            healthSection.classList.remove('dimmed');
+        }
 
         const failPct = Math.round(data.score * 100);
         ssimText.innerText = failPct + '%';
