@@ -205,20 +205,36 @@ async function updateStatus() {
 
         if (!suppressConfidenceUpdates) {
             const failPct = Math.round(data.score * 100);
-            ssimText.innerText = failPct + '%'; 
+            ssimText.innerText = failPct + '%';
             retryText.innerText = `${data.failures}/${data.max_retries}`;
             confidenceBar.style.width = failPct + '%';
-        }
 
-        const warnT = (currentSettings.warn_threshold || 0.3) * 100;
-        const failT = (currentSettings.ai_threshold || 0.6) * 100;
+            // Dynamic color based on thresholds
+            const warnT = (currentSettings.warn_threshold || 0.3) * 100;
+            const failT = (currentSettings.ai_threshold || 0.5) * 100;
 
-        if (data.failures > 0 || failPct >= failT) {
-            confidenceBar.style.backgroundColor = '#FF5722';
-        } else if (failPct >= warnT) {
-            confidenceBar.style.backgroundColor = '#FFC107';
-        } else {
-            confidenceBar.style.backgroundColor = '#4CAF50';
+            let barColor;
+
+            if (failPct >= failT) {
+                // Trigger threshold reached or exceeded → strong red
+                barColor = '#F44336';
+            } else {
+                // From detection threshold TO trigger threshold
+                // Lower → green, upper → yellow→orange
+                const range = failT - warnT;
+                const relative = (failPct - warnT) / range; // 0 → 1
+
+                if (relative < 0.33) {
+                    barColor = '#4CAF50';   // green
+                } else if (relative < 0.66) {
+                    barColor = '#FFEB3B';   // yellow
+                } else {
+                    barColor = '#FFB74D';   // light orange
+                }
+            }
+
+            confidenceBar.style.backgroundColor = barColor;
+
         }
 
     } catch (err) {}
