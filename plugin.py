@@ -318,7 +318,7 @@ def trigger_printer_action(reason="Failure"):
     try:
         requests.post(
             f"{url}/printer/gcode/script",
-            json={"script": f"M118 >>> AI DETECTED {reason.upper()} <<<"}
+            json={"script": f"M118 >>> {reason.upper()}! Action: {action.upper()} <<<"}
         )
 
         if action == "pause":
