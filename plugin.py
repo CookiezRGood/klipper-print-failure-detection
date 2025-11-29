@@ -119,6 +119,7 @@ state = {
     "action_triggered": False,
     "monitoring_active": False,
     "auto_enabled": False,
+    "user_disabled": False,
     "show_mask_overlay": False,
     "cameras": {
         0: {"frame": None, "score": 0.0},
@@ -274,14 +275,17 @@ def action_start():
     state["monitoring_active"] = True
     state["failure_count"] = 0
     state["auto_enabled"] = False
+    state["user_disabled"] = False
     logging.info("Monitoring STARTED")
     return jsonify({"success": True})
 
 @app.route("/api/action/stop", methods=["POST", "GET"])
 def action_stop():
     state["monitoring_active"] = False
-    logging.info("Monitoring STOPPED")
+    state["user_disabled"] = True
+    logging.info("Monitoring STOPPED (manual)")
     return jsonify({"success": True})
+
 
 @app.route("/api/action/toggle_mask", methods=["POST"])
 def toggle_mask():
@@ -342,25 +346,32 @@ def background_monitor():
     while True:
         try:
             klip_state = get_printer_state()
+            # Clear user-disabled flag at start of a NEW print
+            if klip_state == "printing" and state.get("_last_state") != "printing":
+                state["user_disabled"] = False
 
             # AUTO-ENABLE logic
             if config.get("auto_enable", False):
 
-                # Auto-start only if not already monitoring
-                if klip_state == "printing" and not state["monitoring_active"]:
+                # Auto-enable only if user did NOT manually stop monitoring
+                if (
+                    klip_state == "printing"
+                    and not state["monitoring_active"]
+                    and not state["user_disabled"]
+                ):
                     logging.info("Auto-Enable: Print detected → Monitoring ON")
                     state["monitoring_active"] = True
-                    state["auto_enabled"] = True   # ← mark as auto-enabled
+                    state["auto_enabled"] = True
 
-                # Auto-stop only if monitoring was auto-enabled
+                # Auto-disable at end of print (only if it was auto-enabled)
                 if (
                     klip_state in ["complete", "cancelled", "standby"]
-                    and state["monitoring_active"]
                     and state["auto_enabled"]
                 ):
                     logging.info("Auto-Enable: Print ended → Monitoring OFF")
                     state["monitoring_active"] = False
                     state["auto_enabled"] = False
+                    state["user_disabled"] = False    # reset user disable for next print
 
             should_run = (
                 state["monitoring_active"] or
@@ -502,6 +513,8 @@ def background_monitor():
 
         except Exception as e:
             logging.error(f"Loop error: {e}")
+
+        state["_last_state"] = klip_state
 
         time.sleep(float(config["check_interval"]) / 1000.0)
 
