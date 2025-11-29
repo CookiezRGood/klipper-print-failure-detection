@@ -26,7 +26,6 @@ const cam2Img = document.getElementById('cam2-live');
     // Prevent browser/native dragging of camera feed images
     img.setAttribute('draggable', 'false');
     img.draggable = false;
-    img.style.pointerEvents = 'none';
     img.style.userSelect = 'none';
 
     img.addEventListener('mousedown', e => e.preventDefault());
@@ -49,11 +48,25 @@ const maskZones = {
     1: []
 };
 
+// Wire up per-camera Clear Masks buttons
+if (cam1ClearBtn) {
+    cam1ClearBtn.addEventListener('click', () => {
+        maskZones[0] = [];
+        syncMasksToServer();
+    });
+}
+
+if (cam2ClearBtn) {
+    cam2ClearBtn.addEventListener('click', () => {
+        maskZones[1] = [];
+        syncMasksToServer();
+    });
+}
+
 // Disable dragging on live <img>
 [cam1Img, cam2Img].forEach(img => {
     if (img) {
         img.draggable = false;
-        img.style.pointerEvents = 'none';
         img.style.userSelect = 'none';
     }
 });
@@ -565,7 +578,7 @@ setupMaskDrawing(0, cam1View);
 setupMaskDrawing(1, cam2View);
 
 /********************************************************************
- * ↓↓↓ ADDED: FLOATING LOG PANEL ↓↓↓
+ * FLOATING LOG PANEL
  ********************************************************************/
 
 let autoScrollLogs = true;
