@@ -122,8 +122,9 @@ header h2 {
     height: 100%;
     object-fit: contain;
     user-select: none;
-    -webkit-user-drag: none;
+    -webkit-user-drag: none !important;
     pointer-events: none;
+    user-drag: none !important;
 }
 
 /* Disabled overlay */

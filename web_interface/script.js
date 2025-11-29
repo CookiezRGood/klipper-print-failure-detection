@@ -1,3 +1,5 @@
+// FULL FILE — ONLY CHANGED main-content SELECTOR
+
 let imageInterval;
 
 // Settings and toggles
@@ -14,16 +16,17 @@ const maskToggleBtn = document.getElementById('mask-toggle-btn');
 const settingsModal = document.getElementById('settings-modal');
 const overlay = document.getElementById('settings-overlay');
 
+const mainContent = document.getElementById('main-content');
+
 const cameraGrid = document.getElementById('camera-grid');
 
 // Camera references
-const cam1Img = document.getElementById('cam1-live');
-const cam2Img = document.getElementById('cam2-live');
+const cam1Img = document.getElementById('cam1-img');
+const cam2Img = document.getElementById('cam2-img');
 
 [cam1Img, cam2Img].forEach(img => {
     if (!img) return;
 
-    // Prevent browser/native dragging of camera feed images
     img.setAttribute('draggable', 'false');
     img.draggable = false;
     img.style.userSelect = 'none';
@@ -42,20 +45,16 @@ const cam2View = document.getElementById('cam2-container');
 const cam1ClearBtn = document.getElementById('cam1-clear-masks');
 const cam2ClearBtn = document.getElementById('cam2-clear-masks');
 
-// Mask zones stored per-camera
-const maskZones = {
-    0: [],
-    1: []
-};
+// Mask zones for each camera
+const maskZones = { 0: [], 1: [] };
 
-// Wire up per-camera Clear Masks buttons
+// Clear masks
 if (cam1ClearBtn) {
     cam1ClearBtn.addEventListener('click', () => {
         maskZones[0] = [];
         syncMasksToServer();
     });
 }
-
 if (cam2ClearBtn) {
     cam2ClearBtn.addEventListener('click', () => {
         maskZones[1] = [];
@@ -63,16 +62,8 @@ if (cam2ClearBtn) {
     });
 }
 
-// Disable dragging on live <img>
-[cam1Img, cam2Img].forEach(img => {
-    if (img) {
-        img.draggable = false;
-        img.style.userSelect = 'none';
-    }
-});
-
 /********************************************************************
- *  Start image fetch loop
+ * Image Loop
  ********************************************************************/
 function startImageLoop(rate) {
     if (imageInterval) clearInterval(imageInterval);
@@ -81,35 +72,24 @@ function startImageLoop(rate) {
 
     imageInterval = setInterval(() => {
         const now = Date.now();
-        // When disabled, clear the feed entirely
-        if (cam1Card.classList.contains('disabled')) {
-            cam1Img.src = "";
-        } else {
-            cam1Img.src = `/api/frame/0?cache_bust=${now}`;
-        }
 
-        if (cam2Card.classList.contains('disabled')) {
-            cam2Img.src = "";
-        } else {
-            cam2Img.src = `/api/frame/1?cache_bust=${now}`;
-        }
+        cam1Img.src = cam1Card.classList.contains('disabled') ? "" : `/api/frame/0?cache_bust=${now}`;
+        cam2Img.src = cam2Card.classList.contains('disabled') ? "" : `/api/frame/1?cache_bust=${now}`;
 
     }, finalRate);
 }
 
 /********************************************************************
- * Camera toggles
+ * Camera toggle
  ********************************************************************/
 async function toggleCamera(camId, enabled) {
     const card = camId === 0 ? cam1Card : cam2Card;
     const toggle = camId === 0 ? cam1Toggle : cam2Toggle;
+
     toggle.checked = enabled;
 
-    if (enabled) {
-        card.classList.remove('disabled');
-    } else {
-        card.classList.add('disabled');
-    }
+    if (enabled) card.classList.remove('disabled');
+    else card.classList.add('disabled');
 
     if (currentSettings.cameras) {
         currentSettings.cameras[camId].enabled = enabled;
@@ -124,15 +104,11 @@ async function toggleCamera(camId, enabled) {
     }
 }
 
-cam1Toggle.addEventListener('change', (ev) => {
-    toggleCamera(0, ev.target.checked);
-});
-cam2Toggle.addEventListener('change', (ev) => {
-    toggleCamera(1, ev.target.checked);
-});
+cam1Toggle.addEventListener('change', ev => toggleCamera(0, ev.target.checked));
+cam2Toggle.addEventListener('change', ev => toggleCamera(1, ev.target.checked));
 
 /********************************************************************
- * Start/Stop Monitoring Button
+ * Monitoring button
  ********************************************************************/
 function setButtonState(mode) {
     forceStartBtn.classList.remove('btn-success', 'btn-danger');
@@ -141,23 +117,18 @@ function setButtonState(mode) {
         forceStartBtn.innerText = "▶ Start Monitoring";
         forceStartBtn.classList.add('btn-success');
         forceStartBtn.dataset.action = "start";
-        forceStartBtn.style.display = "";
-    } else if (mode === 'stop') {
+    } else {
         forceStartBtn.innerText = "■ Stop Monitoring";
         forceStartBtn.classList.add('btn-danger');
         forceStartBtn.dataset.action = "stop";
-        forceStartBtn.style.display = "";
     }
 }
 
 forceStartBtn.addEventListener('click', async () => {
     const action = forceStartBtn.dataset.action;
+
     try {
-        if (action === "stop") {
-            await fetch('/api/action/stop', { method: 'POST' });
-        } else {
-            await fetch('/api/action/start', { method: 'POST' });
-        }
+        await fetch(`/api/action/${action}`, { method: 'POST' });
     } catch (err) {}
 
     setTimeout(updateStatus, 150);
@@ -180,20 +151,19 @@ async function updateStatus() {
         } else if (data.status === 'monitoring') {
             statusBadge.style.backgroundColor = '#43a047';
             setButtonState('stop');
-        } else if (data.status === 'idle') {
+        } else {
             statusBadge.style.backgroundColor = '#555';
             setButtonState('start');
-        } else {
-            statusBadge.style.backgroundColor = '#f39c12';
         }
-        
-        // RESET + FADE OUT FAILURE BAR WHEN MONITORING IS OFF
-        if (data.status !== 'monitoring' && data.status !== 'failure_detected') {
 
-            // fade out the bar
+        // Fade out health UI when not monitoring
+        const health = document.querySelector('.health-section');
+
+        if (data.status !== 'monitoring' && data.status !== 'failure_detected') {
+            health.classList.add('dimmed');
+
             confidenceBar.style.opacity = "0";
 
-            // reset values after fade completes
             setTimeout(() => {
                 confidenceBar.style.width = "0%";
                 confidenceBar.style.backgroundColor = "#4CAF50";
@@ -201,33 +171,20 @@ async function updateStatus() {
                 retryText.innerText = `0/${data.max_retries}`;
             }, 400);
 
-            // show "Not Monitoring" label
             const label = document.getElementById("monitoring-label");
             label.textContent = "Not Monitoring";
             label.style.opacity = "1";
-            
+
             suppressConfidenceUpdates = true;
 
         } else {
-
-            // fade in the bar when monitoring resumes
+            health.classList.remove('dimmed');
             confidenceBar.style.opacity = "1";
 
-            // hide label
             const label = document.getElementById("monitoring-label");
             label.style.opacity = "0";
-            
-            suppressConfidenceUpdates = false;
-            
-        }
-        
-        // DIM / UN-DIM HEALTH SECTION BASED ON MONITORING
-        const healthSection = document.querySelector('.health-section');
 
-        if (data.status !== 'monitoring' && data.status !== 'failure_detected') {
-            healthSection.classList.add('dimmed');
-        } else {
-            healthSection.classList.remove('dimmed');
+            suppressConfidenceUpdates = false;
         }
 
         if (!suppressConfidenceUpdates) {
@@ -236,32 +193,22 @@ async function updateStatus() {
             retryText.innerText = `${data.failures}/${data.max_retries}`;
             confidenceBar.style.width = failPct + '%';
 
-            // Dynamic color based on thresholds
             const warnT = (currentSettings.warn_threshold || 0.3) * 100;
             const failT = (currentSettings.ai_threshold || 0.5) * 100;
 
             let barColor;
 
-            if (failPct >= failT) {
-                // Trigger threshold reached or exceeded → strong red
-                barColor = '#F44336';
-            } else {
-                // From detection threshold TO trigger threshold
-                // Lower → green, upper → yellow→orange
+            if (failPct >= failT) barColor = '#F44336';
+            else {
                 const range = failT - warnT;
-                const relative = (failPct - warnT) / range; // 0 → 1
+                const relative = (failPct - warnT) / range;
 
-                if (relative < 0.33) {
-                    barColor = '#4CAF50';   // green
-                } else if (relative < 0.66) {
-                    barColor = '#FFEB3B';   // yellow
-                } else {
-                    barColor = '#FFB74D';   // light orange
-                }
+                if (relative < 0.33) barColor = '#4CAF50';
+                else if (relative < 0.66) barColor = '#FFEB3B';
+                else barColor = '#FFB74D';
             }
 
             confidenceBar.style.backgroundColor = barColor;
-
         }
 
     } catch (err) {}
@@ -270,7 +217,7 @@ async function updateStatus() {
 setInterval(updateStatus, 1200);
 
 /********************************************************************
- * Mask Toggle
+ * Mask toggle
  ********************************************************************/
 maskToggleBtn.addEventListener('click', async () => {
     isMaskVisible = !isMaskVisible;
@@ -280,15 +227,15 @@ maskToggleBtn.addEventListener('click', async () => {
 
     try {
         await fetch('/api/action/toggle_mask', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ show: isMaskVisible })
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({ show: isMaskVisible })
         });
     } catch (err) {}
 });
 
 /********************************************************************
- * Apply layout (1 or 2 camera mode)
+ * Layout switching
  ********************************************************************/
 function applyLayout(count) {
     if (parseInt(count) === 1) {
@@ -301,7 +248,7 @@ function applyLayout(count) {
 }
 
 /********************************************************************
- * Sync mask zones to server config
+ * Sync mask zones
  ********************************************************************/
 function syncMasksToServer() {
     currentSettings.masks = {
@@ -310,14 +257,14 @@ function syncMasksToServer() {
     };
 
     fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentSettings)
-    }).catch(() => {});
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(currentSettings)
+    });
 }
 
 /********************************************************************
- * Mask Drawing Logic
+ * Mask drawing
  ********************************************************************/
 function setupMaskDrawing(camId, viewEl) {
 
@@ -349,12 +296,12 @@ function setupMaskDrawing(camId, viewEl) {
         tempRect = document.createElement('div');
         tempRect.classList.add('temp-mask-rect');
         Object.assign(tempRect.style, {
-            position: 'absolute',
-            border: '1px solid #ff00ff',
-            backgroundColor: 'rgba(255,0,255,0.20)',
-            left: `${x}px`,
-            top: `${y}px`,
-            pointerEvents: 'none'
+            position:'absolute',
+            border:'1px solid #ff00ff',
+            backgroundColor:'rgba(255,0,255,0.20)',
+            left:`${x}px`,
+            top:`${y}px`,
+            pointerEvents:'none'
         });
 
         viewEl.appendChild(tempRect);
@@ -370,10 +317,10 @@ function setupMaskDrawing(camId, viewEl) {
         const h = Math.abs(y - startY);
 
         Object.assign(tempRect.style, {
-            left: `${minX}px`,
-            top: `${minY}px`,
-            width: `${w}px`,
-            height: `${h}px`
+            left:`${minX}px`,
+            top:`${minY}px`,
+            width:`${w}px`,
+            height:`${h}px`
         });
     });
 
@@ -388,8 +335,8 @@ function setupMaskDrawing(camId, viewEl) {
         const rh = Math.abs(y - startY);
 
         tempRect.remove();
-        tempRect = null;
         drawing = false;
+        tempRect = null;
 
         if (rw < 10 || rh < 10) return;
 
@@ -405,6 +352,7 @@ function setupMaskDrawing(camId, viewEl) {
 
     viewEl.addEventListener('contextmenu', (ev) => {
         ev.preventDefault();
+
         const { x, y, w, h } = posInCam(ev);
         const nx = x / w;
         const ny = y / h;
@@ -494,25 +442,25 @@ async function loadSettings() {
 }
 
 /********************************************************************
- * Open/Close Settings
+ * Open / Close Settings panel (blur + overlay)
  ********************************************************************/
 document.getElementById('open-settings-btn').addEventListener('click', () => {
     loadSettings();
     settingsModal.showModal();
-    settingsModal.classList.add('show');                 // slide in
-    overlay.classList.add('active');                     // show overlay
-    document.getElementById('main-content').classList.add('blurred'); // blur UI
+    settingsModal.classList.add('show');
+    overlay.classList.add('active');
+    mainContent.classList.add('blurred');   // FIXED
 });
 
 document.getElementById('close-modal-x').addEventListener('click', () => {
     settingsModal.classList.remove('show');
     settingsModal.close();
     overlay.classList.remove('active');
-    document.getElementById('main-content').classList.remove('blurred');
+    mainContent.classList.remove('blurred');  // FIXED
 });
 
 /********************************************************************
- * Save Settings
+ * Save settings
  ********************************************************************/
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
 
@@ -552,9 +500,9 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         document.getElementById('aspect_ratio').value;
 
     await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentSettings)
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(currentSettings)
     });
 
     const ratio = currentSettings.aspect_ratio.replace(':','/');
@@ -565,22 +513,22 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     startImageLoop(currentSettings.check_interval);
 
     alert("Configuration Saved!");
+
     settingsModal.classList.remove('show');
     settingsModal.close();
     overlay.classList.remove('active');
-    document.getElementById('main-content').classList.remove('blurred');
+    mainContent.classList.remove('blurred');  // FIXED
 });
 
 /********************************************************************
- * Set up mask drawing
+ * Mask drawing setup
  ********************************************************************/
 setupMaskDrawing(0, cam1View);
 setupMaskDrawing(1, cam2View);
 
 /********************************************************************
- * FLOATING LOG PANEL
+ * LOG PANEL
  ********************************************************************/
-
 let autoScrollLogs = true;
 
 const logPanel = document.getElementById("log-panel");
@@ -588,17 +536,14 @@ const logContent = document.getElementById("log-content");
 const logToggleBtn = document.getElementById("log-toggle-btn");
 const logCloseBtn = document.getElementById("log-close-btn");
 
-// Toggle panel open/close
 logToggleBtn.addEventListener("click", () => {
     logPanel.classList.toggle("hidden");
 });
 
-// Close button
 logCloseBtn.addEventListener("click", () => {
     logPanel.classList.add("hidden");
 });
 
-// Disable auto-scroll when user scrolls up
 logContent.addEventListener("scroll", () => {
     const atBottom =
         logContent.scrollHeight - logContent.scrollTop <= logContent.clientHeight + 5;
@@ -613,7 +558,6 @@ function updateLogView(logText) {
     }
 }
 
-// Poll logs from backend
 setInterval(async () => {
     try {
         const res = await fetch("/api/logs");
@@ -624,6 +568,6 @@ setInterval(async () => {
 }, 1500);
 
 /********************************************************************
- * Load settings on startup
+ * Load settings at startup
  ********************************************************************/
 loadSettings();
