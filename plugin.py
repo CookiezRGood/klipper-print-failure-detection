@@ -340,13 +340,25 @@ def background_monitor():
     while True:
         try:
             klip_state = get_printer_state()
-            # Clear user-disabled flag at start of a NEW print
+
+            # Auto-disable when printer is NOT printing
+            if klip_state != "printing":
+                if state["monitoring_active"]:
+                    logging.info("Printer not printing → Monitoring OFF")
+                state["monitoring_active"] = False
+                state["action_triggered"] = False
+                state["user_disabled"] = False   # reset for the next print
+
+            # If printer just entered printing state, clear old flags
             if klip_state == "printing" and state.get("_last_state") != "printing":
-                state["user_disabled"] = False
+                # DO NOT auto-enable — just reset tracking variables
+                state["action_triggered"] = False
 
-            pass
-
+            # Monitoring enabled only by macro/api
             ai_enabled = state["monitoring_active"]
+
+            # Track last printer state
+            state["_last_state"] = klip_state
 
             masks_cfg = config.get("masks", {})
             max_frame_score = 0.0
