@@ -59,3 +59,35 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 - **Auto-Start Toggle**: Toggle switch to enable the plugin automatically starting when you start a print.
 
 - **Live Plugin Logs**: View the logs for the plugin on the main dashboard to check for functionality and see errors.
+
+## Installation
+
+Clone this repository to your printer and install:
+   ```bash
+   cd ~/klipper/klippy/extras/
+   git clone https://github.com/CookiezRGood/klipper-print-failure-detection.git
+   cd ~/klipper/klippy/extras/klipper-print-failure-detection
+   sudo bash install.sh
+   ```
+
+## Post Installation Steps
+
+- Open your browser and go to http://YOUR-IP:7126 to see the dashboard.
+- Open the settings and input your printer camera ip (used in crowsnest).
+- Adjust any other settings to your preference with testing to make sure it works well for your setup.
+   - The main testing you need to find is your ideal trigger threshold value. The detection threshold value can be anything as long as its lower than the detection threshold value.
+
+
+## Automatic Updates
+
+Add the following to your moonraker.conf to receive automatic updates:
+
+```bash
+[update_manager klipper-print-failure-detection]
+type: git_repo
+path: ~/klipper/klippy/extras/klipper-print-failure-detection
+origin: https://github.com/CookiezRGood/klipper-print-failure-detection.git
+install_script: install.sh
+primary_branch: main
+managed_services: klipper-print-failure-detection
+```
