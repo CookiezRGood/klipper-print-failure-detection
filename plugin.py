@@ -118,6 +118,7 @@ state = {
     "failure_count": 0,
     "action_triggered": False,
     "monitoring_active": False,
+    "auto_enabled": False,
     "show_mask_overlay": False,
     "cameras": {
         0: {"frame": None, "score": 0.0},
@@ -272,6 +273,7 @@ def run_inference(image):
 def action_start():
     state["monitoring_active"] = True
     state["failure_count"] = 0
+    state["auto_enabled"] = False
     logging.info("Monitoring STARTED")
     return jsonify({"success": True})
 
@@ -343,12 +345,22 @@ def background_monitor():
 
             # AUTO-ENABLE logic
             if config.get("auto_enable", False):
+
+                # Auto-start only if not already monitoring
                 if klip_state == "printing" and not state["monitoring_active"]:
                     logging.info("Auto-Enable: Print detected → Monitoring ON")
                     state["monitoring_active"] = True
-                if klip_state in ["complete", "cancelled", "standby"] and state["monitoring_active"]:
+                    state["auto_enabled"] = True   # ← mark as auto-enabled
+
+                # Auto-stop only if monitoring was auto-enabled
+                if (
+                    klip_state in ["complete", "cancelled", "standby"]
+                    and state["monitoring_active"]
+                    and state["auto_enabled"]
+                ):
                     logging.info("Auto-Enable: Print ended → Monitoring OFF")
                     state["monitoring_active"] = False
+                    state["auto_enabled"] = False
 
             should_run = (
                 state["monitoring_active"] or
@@ -377,6 +389,12 @@ def background_monitor():
 
                     arr = np.frombuffer(r.content, np.uint8)
                     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+                    # If decoding failed, skip this frame safely
+                    if img is None:
+                        logging.warning(f"Camera {cam_id} provided invalid image data.")
+                        state["cameras"][cam_id]["score"] = 0.0
+                        continue
 
                     debug = img.copy()
                     h, w = img.shape[:2]
