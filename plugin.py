@@ -460,7 +460,35 @@ def background_monitor():
                     # Run AI
                     score, dets = run_inference(img)
 
-                    state["cameras"][cam_id]["score"] = score
+                    # CATEGORY FILTERING (new)
+                    categories = config.get("ai_categories", {})
+
+                    # Keep only detections for enabled categories
+                    filtered_dets = []
+                    for d in dets:
+                        cid = d["class"]
+                        label = CLASS_NAMES[cid] if cid < len(CLASS_NAMES) else "unknown"
+                        key = label.lower()
+                        cat_cfg = categories.get(key, None)
+
+                        # If category missing: assume enabled (matches old behavior)
+                        # If disabled: skip it entirely
+                        if cat_cfg and not cat_cfg.get("enabled", True):
+                            continue
+
+                        filtered_dets.append(d)
+
+                    # If all detections were disabled → treat as no detections
+                    if len(filtered_dets) == 0:
+                        score = 0.0
+                        state["cameras"][cam_id]["score"] = 0.0
+                    else:
+                        # Score = best confidence of *enabled categories only*
+                        score = max(float(d["conf"]) for d in filtered_dets)
+                        state["cameras"][cam_id]["score"] = score
+
+                    # Replace original dets with filtered version
+                    dets = filtered_dets
 
                     # Category settings
                     categories = config.get("ai_categories", {})
