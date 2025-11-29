@@ -483,15 +483,13 @@ def background_monitor():
                         cat_cfg = categories.get(key, {
                             "enabled": True,
                             "trigger": True,
-                            "threshold": float(config.get("ai_threshold", 0.5)),
+                            "threshold": 0.5,
                         })
 
                         # Decide colors (visual only)
-                        base_thresh = float(config.get("ai_threshold", 0.5))
+                        base_thresh = 0.5
                         if not cat_cfg.get("enabled", True):
-                            # Disabled category → draw grey box, never triggers
-                            box_color = (128, 128, 128)
-                            text_color = (255, 255, 255)
+                            continue
                         else:
                             box_color = (0, 0, 255) if conf >= base_thresh else (0, 255, 255)
                             text_color = (255, 255, 255) if conf >= base_thresh else (0, 0, 0)
