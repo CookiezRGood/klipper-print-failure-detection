@@ -3,6 +3,7 @@ let imageInterval;
 // Settings and toggles
 let currentSettings = {};
 let isMaskVisible = false;
+let suppressConfidenceUpdates = false;
 
 const statusBadge = document.getElementById('status-indicator');
 const ssimText = document.getElementById('ssim-val');
@@ -177,6 +178,8 @@ async function updateStatus() {
             const label = document.getElementById("monitoring-label");
             label.textContent = "Not Monitoring";
             label.style.opacity = "1";
+            
+            suppressConfidenceUpdates = true;
 
         } else {
 
@@ -186,6 +189,9 @@ async function updateStatus() {
             // hide label
             const label = document.getElementById("monitoring-label");
             label.style.opacity = "0";
+            
+            suppressConfidenceUpdates = false;
+            
         }
         
         // DIM / UN-DIM HEALTH SECTION BASED ON MONITORING
@@ -197,10 +203,12 @@ async function updateStatus() {
             healthSection.classList.remove('dimmed');
         }
 
-        const failPct = Math.round(data.score * 100);
-        ssimText.innerText = failPct + '%';
-        retryText.innerText = `${data.failures}/${data.max_retries}`;
-        confidenceBar.style.width = failPct + '%';
+        if (!suppressConfidenceUpdates) {
+            const failPct = Math.round(data.score * 100);
+            ssimText.innerText = failPct + '%'; 
+            retryText.innerText = `${data.failures}/${data.max_retries}`;
+            confidenceBar.style.width = failPct + '%';
+        }
 
         const warnT = (currentSettings.warn_threshold || 0.3) * 100;
         const failT = (currentSettings.ai_threshold || 0.6) * 100;
