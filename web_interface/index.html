@@ -142,7 +142,6 @@
                     </select>
                 </div>
 
-                <!-- MOVED HERE: MOONRAKER URL AT END OF CAMERA SETUP -->
                 <div class="setting-row">
                     <label>Moonraker URL:</label>
                     <input type="text" id="moonraker_url">
@@ -153,26 +152,28 @@
             <!-- DETECTION -->
             <div class="setting-group">
                 <h4>Detection Logic</h4>
-
-                <p class="help-text" style="margin-top: -4px; margin-bottom: 6px;">
-                    <b>Detection Threshold</b> = when to show yellow boxes (early warning).<br>
-                    <b>Trigger Threshold</b> = when detection is strong enough to count as a failure.
-                </p>
                 
                 <div class="setting-row">
                     <label>Check Interval (ms):</label>
                     <input type="number" id="check_interval" min="100" step="100">
                 </div>
 
+                <div class="help-box">Speed of AI checks. Affects responsiveness and CPU usage.</div>
+
                 <div class="setting-row">
                     <label>Detection Threshold (%):</label>
                     <input type="number" id="warn_threshold" min="0" max="100">
                 </div>
 
+                <div class="help-box">Shows yellow early-warning boxes if detections exceed this value.</div>
+
                 <div class="setting-row">
                     <label>Trigger Threshold (%):</label>
                     <input type="number" id="ai_threshold" min="0" max="100">
                 </div>
+
+                <div class="help-box">Triggers your chosen action (pause/cancel) if above this value.</div>
+
             </div>
 
             <!-- ACTIONS -->
