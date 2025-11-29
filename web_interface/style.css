@@ -441,6 +441,22 @@ dialog#settings-modal {
     pointer-events: auto;
 }
 
+.category-card {
+    padding: 12px;
+    border: 1px solid #444;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    background: #1f1f1f;
+}
+.category-card h5 {
+    margin: 0 0 8px 0;
+}
+.category-card label {
+    display: block;
+    margin: 6px 0;
+}
+
+
 /* Slide-in animation for <dialog> */
 #settings-modal {
     transform: translateY(-20px);

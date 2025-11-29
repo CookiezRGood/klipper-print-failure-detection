@@ -411,6 +411,30 @@ async function loadSettings() {
 
         document.getElementById('ai_threshold').value =
             Math.round((currentSettings.ai_threshold || 0.5) * 100);
+            
+        // Load category settings
+        const cats = currentSettings.ai_categories || {};
+
+        document.getElementById("cat_spaghetti_enabled").checked =
+            cats.spaghetti?.enabled ?? true;
+        document.getElementById("cat_spaghetti_trigger").checked =
+            cats.spaghetti?.trigger ?? true;
+        document.getElementById("cat_spaghetti_threshold").value =
+            Math.round((cats.spaghetti?.threshold ?? 0.5) * 100);
+
+        document.getElementById("cat_stringing_enabled").checked =
+            cats.stringing?.enabled ?? true;
+        document.getElementById("cat_stringing_trigger").checked =
+            cats.stringing?.trigger ?? false;
+        document.getElementById("cat_stringing_threshold").value =
+            Math.round((cats.stringing?.threshold ?? 0.8) * 100);
+
+        document.getElementById("cat_zits_enabled").checked =
+            cats.zits?.enabled ?? true;
+        document.getElementById("cat_zits_trigger").checked =
+            cats.zits?.trigger ?? false;
+        document.getElementById("cat_zits_threshold").value =
+            Math.round((cats.zits?.threshold ?? 0.8) * 100);
 
         // Failures
         document.getElementById('consecutive_failures').value =
@@ -490,6 +514,25 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
 
     currentSettings.on_failure =
         document.getElementById('on_failure').value;
+        
+    // Save category settings
+    currentSettings.ai_categories = {
+        spaghetti: {
+            enabled: document.getElementById("cat_spaghetti_enabled").checked,
+            trigger: document.getElementById("cat_spaghetti_trigger").checked,
+            threshold: document.getElementById("cat_spaghetti_threshold").value / 100
+        },
+        stringing: {
+            enabled: document.getElementById("cat_stringing_enabled").checked,
+            trigger: document.getElementById("cat_stringing_trigger").checked,
+            threshold: document.getElementById("cat_stringing_threshold").value / 100
+        },
+        zits: {
+            enabled: document.getElementById("cat_zits_enabled").checked,
+            trigger: document.getElementById("cat_zits_trigger").checked,
+            threshold: document.getElementById("cat_zits_threshold").value / 100
+        }
+    };
 
     currentSettings.masks = {
         "0": maskZones[0],

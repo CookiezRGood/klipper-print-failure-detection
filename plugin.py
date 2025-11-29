@@ -439,33 +439,62 @@ def background_monitor():
 
                     # Run AI
                     score, dets = run_inference(img)
-                    state["cameras"][cam_id]["score"] = score
 
-                    if score > max_frame_score:
-                        max_frame_score = score
+                    # Load category settings
+                    categories = config.get("ai_categories", {})
 
-                    # Draw detections
-                    thresh = config.get("ai_threshold", 0.5)
+                    # Shared detection threshold
+                    detect_thresh = float(config.get("warn_threshold", 0.3))
+
+                    # Per-category trigger thresholds get applied later
+                    max_cat_score = 0.0
+                    failure_detected_this_frame = False
 
                     for d in dets:
                         x, y, ww, hh = d["box"]
-                        conf = d["conf"]
+                        conf = float(d["conf"])
                         cid = d["class"]
+                        label = CLASS_NAMES[cid] if cid < len(CLASS_NAMES) else "Unknown"
 
-                        label = CLASS_NAMES[cid] if cid < len(CLASS_NAMES) else "FAIL"
+                        # Skip any detection below SHARED detection threshold
+                        if conf < detect_thresh:
+                            continue
 
-                        color = (0,0,255) if conf >= thresh else (0,255,255)
-                        text_color = (255,255,255) if conf >= thresh else (0,0,0)
+                        # Per-category config
+                        key = label.lower()  # "Spaghetti" -> "spaghetti"
+                        cat = categories.get(key, None)
+
+                        # If category missing or disabled → ignore
+                        if not cat or not cat.get("enabled", True):
+                            continue
+
+                        # Update camera score for UI health bar
+                        max_cat_score = max(max_cat_score, conf)
+
+                        # Check trigger logic
+                        if cat.get("trigger", False):
+                            trig_thresh = float(cat.get("threshold", 0.5))
+                            if conf >= trig_thresh:
+                                failure_detected_this_frame = True
+
+                        # Draw detection box
+                        color = (0,0,255) if conf >= float(config.get("ai_threshold", 0.5)) else (0,255,255)
+                        text_color = (255,255,255) if color == (0,0,255) else (0,0,0)
 
                         cv2.rectangle(debug, (x,y), (x+ww,y+hh), color, 2)
-
                         text = f"{label} {int(conf*100)}%"
                         (tw,th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-
                         ty = y - 5 if y > 20 else y + th + 5
                         cv2.rectangle(debug, (x, ty-th-2), (x+tw, ty+2), color, -1)
                         cv2.putText(debug, text, (x, ty),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 1)
+
+                    # Store the highest category score for this camera
+                    state["cameras"][cam_id]["score"] = max_cat_score
+
+                    # Track highest score for the whole frame group
+                    if max_cat_score > max_frame_score:
+                        max_frame_score = max_cat_score
 
                     state["cameras"][cam_id]["frame"] = debug
 
