@@ -84,8 +84,6 @@ default_config = {
     # Mask zones
     "masks": {"0": [], "1": []},
 
-    # Auto enable monitoring
-    "auto_enable": False
 }
 
 config = default_config.copy()
@@ -97,8 +95,6 @@ if os.path.exists(SETTINGS_FILE):
             config.update(loaded)
             if "masks" not in config:
                 config["masks"] = default_config["masks"]
-            if "auto_enable" not in config:
-                config["auto_enable"] = False
     except Exception:
         pass
 
@@ -118,7 +114,6 @@ state = {
     "failure_count": 0,
     "action_triggered": False,
     "monitoring_active": False,
-    "auto_enabled": False,
     "user_disabled": False,
     "show_mask_overlay": False,
     "cameras": {
@@ -274,7 +269,6 @@ def run_inference(image):
 def action_start():
     state["monitoring_active"] = True
     state["failure_count"] = 0
-    state["auto_enabled"] = False
     state["user_disabled"] = False
     logging.info("Monitoring STARTED")
     return jsonify({"success": True})
@@ -350,29 +344,7 @@ def background_monitor():
             if klip_state == "printing" and state.get("_last_state") != "printing":
                 state["user_disabled"] = False
 
-            # AUTO-ENABLE logic
-            if config.get("auto_enable", False):
-
-                # Auto-start only if not already monitoring and user
-                # didn't manually disable it during this print.
-                if (
-                    klip_state == "printing"
-                    and not state["monitoring_active"]
-                    and not state["user_disabled"]
-                ):
-                    logging.info("Auto-Enable: Print detected → Monitoring ON")
-                    state["monitoring_active"] = True
-                    state["auto_enabled"] = True   # mark as auto-enabled
-
-                # Auto-stop only if monitoring was auto-enabled
-                if (
-                    klip_state in ["complete", "cancelled", "standby"]
-                    and state["auto_enabled"]
-                ):
-                    logging.info("Auto-Enable: Print ended → Monitoring OFF")
-                    state["monitoring_active"] = False
-                    state["auto_enabled"] = False
-                    state["user_disabled"] = False   # reset for next print
+            pass
 
             ai_enabled = state["monitoring_active"]
 
@@ -512,8 +484,6 @@ def background_monitor():
         except Exception as e:
             logging.error(f"Loop error: {e}")
 
-        state["_last_state"] = klip_state
-
         time.sleep(float(config["check_interval"]) / 1000.0)
 
 # Start thread
@@ -539,10 +509,6 @@ def serve_static(path):
 def settings():
     if request.method == "POST":
         incoming = request.json
-
-        # Ensure new auto_enable key exists
-        if "auto_enable" not in incoming:
-            incoming["auto_enable"] = config.get("auto_enable", False)
 
         config.update(incoming)
         save_config_to_file()
