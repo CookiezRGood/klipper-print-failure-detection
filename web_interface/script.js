@@ -193,22 +193,42 @@ async function updateStatus() {
             retryText.innerText = `${data.failures}/${data.max_retries}`;
             confidenceBar.style.width = failPct + '%';
 
+            // Global detection threshold
             const warnT = (currentSettings.warn_threshold || 0.3) * 100;
-            const failT = (currentSettings.ai_threshold || 0.5) * 100;
 
+            // Find trigger thresholds for categories that can cancel the print
+            const cats = currentSettings.ai_categories || {};
+            const triggerThresholds = [];
+
+            Object.keys(cats).forEach(k => {
+                const c = cats[k];
+                if (c.enabled && c.trigger) {
+                    triggerThresholds.push(c.threshold * 100);
+                }
+            });
+
+            // Lowest trigger threshold becomes "failure threshold" for bar color
+            const failT = triggerThresholds.length > 0
+                ? Math.min(...triggerThresholds)
+                : 100;
+
+            // Compute color
             let barColor;
 
-            if (failPct >= failT) barColor = '#F44336';
-            else {
+            if (failPct >= failT) {
+                barColor = '#F44336'; // red = above failure threshold
+            } else {
                 const range = failT - warnT;
                 const relative = (failPct - warnT) / range;
 
-                if (relative < 0.33) barColor = '#4CAF50';
-                else if (relative < 0.66) barColor = '#FFEB3B';
-                else barColor = '#FFB74D';
+                if (relative < 0) barColor = '#4CAF50';          // green
+                else if (relative < 0.33) barColor = '#4CAF50'; // green
+                else if (relative < 0.66) barColor = '#FFEB3B'; // yellow
+                else barColor = '#FFB74D';                       // orange
             }
 
             confidenceBar.style.backgroundColor = barColor;
+
         }
 
     } catch (err) {}
@@ -408,9 +428,6 @@ async function loadSettings() {
         // Thresholds
         document.getElementById('warn_threshold').value =
             Math.round((currentSettings.warn_threshold || 0.3) * 100);
-
-        document.getElementById('ai_threshold').value =
-            Math.round((currentSettings.ai_threshold || 0.5) * 100);
             
         // Load category settings
         const cats = currentSettings.ai_categories || {};
@@ -505,9 +522,6 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
 
     currentSettings.warn_threshold =
         parseInt(document.getElementById('warn_threshold').value) / 100;
-
-    currentSettings.ai_threshold =
-        parseInt(document.getElementById('ai_threshold').value) / 100;
 
     currentSettings.consecutive_failures =
         parseInt(document.getElementById('consecutive_failures').value);
