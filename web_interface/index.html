@@ -105,7 +105,9 @@
             <button id="close-modal-x" class="icon-btn">×</button>
         </div>
 
-        <div class="modal-body">
+        <div class="modal-body settings-grid">
+
+            <!-- LEFT COLUMN -->
 
             <!-- CAMERA SETUP -->
             <div class="setting-group">
@@ -141,13 +143,13 @@
                     <label>Moonraker URL:</label>
                     <input type="text" id="moonraker_url">
                 </div>
-
             </div>
 
-            <!-- DETECTION -->
+
+            <!-- DETECTION LOGIC -->
             <div class="setting-group">
                 <h4>Detection Logic</h4>
-                
+
                 <div class="setting-row">
                     <label>Check Interval (ms):</label>
                     <input type="number" id="check_interval" min="100" step="100">
@@ -161,65 +163,50 @@
                 </div>
 
                 <div class="help-box">Shows yellow early-warning boxes if detections exceed this value.</div>
+            </div>
 
-                <!-- AI CATEGORY SETTINGS -->
-                <div class="setting-group">
-                    <h4>AI Categories</h4>
 
-                    <!-- SPAGHETTI -->
-                    <div class="category-card">
-                        <h5>Spaghetti</h5>
-                        <label>
-                            <input type="checkbox" id="cat_spaghetti_enabled">
-                            Detect Spaghetti
-                        </label>
-                        <label>
-                            <input type="checkbox" id="cat_spaghetti_trigger">
-                            Can Trigger Failure
-                        </label>
-                        <label>
-                            Threshold:
-                            <input type="number" id="cat_spaghetti_threshold" min="0" max="100" step="1">
-                        </label>
-                    </div>
 
-                    <!-- STRINGING -->
-                    <div class="category-card">
-                        <h5>Stringing</h5>
-                        <label>
-                            <input type="checkbox" id="cat_stringing_enabled">
-                            Detect Stringing
-                        </label>
-                        <label>
-                            <input type="checkbox" id="cat_stringing_trigger">
-                            Can Trigger Failure
-                        </label>
-                        <label>
-                            Threshold:
-                            <input type="number" id="cat_stringing_threshold" min="0" max="100" step="1">
-                        </label>
-                    </div>
+            <!-- RIGHT COLUMN -->
 
-                    <!-- ZITS -->
-                    <div class="category-card">
-                        <h5>Zits</h5>
-                        <label>
-                            <input type="checkbox" id="cat_zits_enabled">
-                            Detect Zits
-                        </label>
-                        <label>
-                            <input type="checkbox" id="cat_zits_trigger">
-                            Can Trigger Failure
-                        </label>
-                        <label>
-                            Threshold:
-                            <input type="number" id="cat_zits_threshold" min="0" max="100" step="1">
-                        </label>
-                    </div>
+            <!-- AI CATEGORIES -->
+            <div class="setting-group">
+                <h4>AI Categories</h4>
 
+                <!-- SPAGHETTI -->
+                <div class="category-card">
+                    <h5>Spaghetti</h5>
+                    <label><input type="checkbox" id="cat_spaghetti_enabled"> Detect Spaghetti</label>
+                    <label><input type="checkbox" id="cat_spaghetti_trigger"> Can Trigger Failure</label>
+                    <label>
+                        Trigger Threshold (%):
+                        <input type="number" id="cat_spaghetti_threshold" min="0" max="100" step="1">
+                    </label>
                 </div>
 
+                <!-- STRINGING -->
+                <div class="category-card">
+                    <h5>Stringing</h5>
+                    <label><input type="checkbox" id="cat_stringing_enabled"> Detect Stringing</label>
+                    <label><input type="checkbox" id="cat_stringing_trigger"> Can Trigger Failure</label>
+                    <label>
+                        Trigger Threshold (%):
+                        <input type="number" id="cat_stringing_threshold" min="0" max="100" step="1">
+                    </label>
+                </div>
+
+                <!-- ZITS -->
+                <div class="category-card">
+                    <h5>Zits</h5>
+                    <label><input type="checkbox" id="cat_zits_enabled"> Detect Zits</label>
+                    <label><input type="checkbox" id="cat_zits_trigger"> Can Trigger Failure</label>
+                    <label>
+                        Trigger Threshold (%):
+                        <input type="number" id="cat_zits_threshold" min="0" max="100" step="1">
+                    </label>
+                </div>
             </div>
+
 
             <!-- ACTIONS -->
             <div class="setting-group">
