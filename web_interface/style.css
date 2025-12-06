@@ -133,7 +133,6 @@ header h2 {
     background: #000;
     border-radius: 6px;
     overflow: hidden;
-    padding: 6px;
     box-sizing: border-box;
     display: flex;
     justify-content: center;
@@ -157,7 +156,6 @@ header h2 {
     pointer-events: none;
     user-drag: none !important;
     display: block;
-    border: 2px solid #000;
 }
 
 /* Disabled overlay */
@@ -177,7 +175,6 @@ header h2 {
     opacity: 0;
     transition: opacity 0.15s ease;
     border-radius: 4px;
-    border: 2px solid #000;
 }
 
 .camera-card.disabled .disabled-overlay {
