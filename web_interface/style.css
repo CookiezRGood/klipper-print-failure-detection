@@ -1,0 +1,742 @@
+:root {
+    --bg-color: #111;
+    --card-bg: #1b1b1b;
+    --accent: #2196F3;
+    --text-main: #f5f5f5;
+    --text-muted: #aaa;
+    --border-subtle: #333;
+    --danger: #e53935;
+    --success: #43a047;
+    --warning: #fbc02d;
+}
+
+/* Global layout */
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background-color: #0d0d0d;
+    color: var(--text-main);
+}
+
+.container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 10px 10px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+.blurred {
+    filter: blur(4px);
+    transition: filter 0.35s ease;
+}
+
+/* Header */
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+header h2 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+}
+
+.status-badge {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    background-color: #555;
+    color: white;
+}
+
+/* Main layout */
+
+.main-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Camera grid */
+
+.camera-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    min-height: 0;
+    min-width: 0;
+    flex: 1;
+}
+
+/* Camera card */
+
+.camera-card {
+    background: var(--card-bg);
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    box-sizing: border-box;
+    margin: 0;
+}
+
+.camera-card.hidden {
+    display: none;
+}
+
+.cam-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    margin-bottom: 16px;
+}
+
+.cam-stats {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 0.80rem;
+    color: var(--text-main);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    opacity: 0.9;
+    margin-bottom: 16px;
+}
+
+.cam-stat-row {
+    display: flex;
+    justify-content: space-between;
+    color: #bbb;
+}
+
+.camera-card.disabled .cam-stats {
+    opacity: 0.3;
+}
+
+/* Camera viewport */
+
+.camera-viewport {
+    position: relative;
+    background: #000;
+    border-radius: 6px;
+    overflow: hidden;
+    padding: 6px;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 12px;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    flex: 1;
+}
+
+/* Live feed image */
+
+.live-feed {
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none !important;
+    pointer-events: none;
+    user-drag: none !important;
+    display: block;
+    border: 2px solid #000;
+}
+
+/* Disabled overlay */
+
+.disabled-overlay {
+    position: absolute;
+    inset: 6px;
+    background: rgba(15, 15, 15, 0.8);
+    color: #999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    border-radius: 4px;
+    border: 2px solid #000;
+}
+
+.camera-card.disabled .disabled-overlay {
+    opacity: 1;
+}
+
+.camera-card.disabled .live-feed {
+    display: none !important;
+}
+
+.camera-card.disabled .camera-viewport {
+    background: #0f0f0f !important; 
+}
+
+
+/* Camera controls */
+
+.cam-controls {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+    padding: 0 4px;
+}
+
+/* Mask tools */
+
+.mask-tools {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* Toggle switches */
+
+.toggle-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.toggle-switch input {
+    display: none;
+}
+
+.toggle-switch .slider {
+    width: 36px;
+    height: 18px;
+    background: #444;
+    border-radius: 999px;
+    position: relative;
+    transition: background 0.2s ease;
+}
+
+.toggle-switch .slider::before {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s ease;
+}
+
+.toggle-switch input:checked + .slider {
+    background: var(--accent);
+}
+
+.toggle-switch input:checked + .slider::before {
+    transform: translateX(18px);
+}
+
+.toggle-switch .label-text {
+    color: var(--text-muted);
+}
+
+/* Health section */
+
+.health-section {
+    background: var(--card-bg);
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.health-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+}
+
+/* Progress bar */
+
+.progress-track {
+    position: relative;
+    height: 12px;
+    border-radius: 999px;
+    background: #222;
+    overflow: hidden;
+}
+
+.progress-fill {
+    position: absolute;
+    inset: 0;
+    width: 0%;
+    background: var(--success);
+    opacity: 1;
+    transition:
+        width 0.4s ease,
+        background 0.3s ease,
+        opacity 0.5s ease;
+}
+
+.monitoring-label {
+    position: absolute;
+    width: 100%;
+    text-align: center;
+    top: -18px;
+    font-size: 0.75rem;
+    color: #bbb;
+    pointer-events: none;
+    opacity: 0;     /* default hidden */
+    transition: opacity 0.3s ease;
+}
+
+.health-section.dimmed {
+    opacity: 0.35;
+    transition: opacity 0.3s ease;
+}
+
+/* Controls */
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.primary-btn,
+.secondary-btn {
+    border-radius: 6px;
+    border: none;
+    padding: 6px 12px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.primary-btn {
+    background: var(--accent);
+    color: #fff;
+}
+
+.primary-btn.btn-success {
+    background: var(--success);
+}
+
+.primary-btn.btn-danger {
+    background: var(--danger);
+}
+
+.secondary-btn {
+    background: #2a2a2a;
+    color: var(--text-main);
+}
+
+.primary-btn:hover,
+.secondary-btn:hover {
+    opacity: 0.9;
+}
+
+/* Help text */
+
+.help-text {
+    margin: 0 0 4px 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.help-box {
+    margin-top: 4px;
+    margin-bottom: 6px;
+    padding: 6px 6px;
+    background: #1a1a1a;
+    border-left: 3px solid #fbc02d; /* yellow highlight */
+    border-radius: 4px;
+    color: #bbb;
+    font-size: 0.8rem;
+    line-height: 1.3;
+}
+
+/* Settings modal */
+
+dialog#settings-modal {
+    border: none;
+    border-radius: 10px;
+    padding: 0;
+    max-width: 720px;
+    width: 90%;
+    background: #111;
+    color: var(--text-main);
+}
+
+.modal-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.icon-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-main);
+    font-size: 1.4rem;
+    cursor: pointer;
+}
+
+.modal-body {
+    padding: 12px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.setting-group {
+    flex: 1 1 240px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 8px;
+    background: #181818;
+}
+
+.setting-group h4 {
+    margin: 0 0 8px 0;
+    font-size: 0.95rem;
+    color: #64b5f6;
+}
+
+.setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.85rem;
+}
+
+.setting-row label {
+    flex: 0 0 120px;
+    color: var(--text-muted);
+}
+
+.setting-row input,
+.setting-row select {
+    flex: 1;
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+    background: #111;
+    color: var(--text-main);
+    font-size: 0.85rem;
+}
+
+.modal-footer {
+    padding: 8px 14px 10px 14px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: flex-end;
+}
+
+#settings-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    z-index: 3500;
+}
+
+#settings-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.category-card {
+    padding: 12px;
+    border: 1px solid #444;
+    border-radius: 10px;
+    margin-bottom: 6px;
+    background: #1f1f1f;
+}
+.category-card h5 {
+    margin: 0 0 8px 0;
+}
+.category-card label {
+    display: block;
+    margin: 6px 0;
+}
+
+.category-card input[type="number"],
+.category-card input[type="text"],
+.category-card select {
+    width: 100%;
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+    background: #111;
+    color: var(--text-main);
+    font-size: 0.85rem;
+    box-sizing: border-box;
+}
+
+.modal-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr 1fr;
+    gap: 8px;
+    padding: 12px 14px;
+}
+
+/* 1 — Camera Setup: full width, row 1 */
+.modal-body .setting-group:nth-child(1) {
+    grid-column: 1 / 3; /* span both columns */
+    grid-row: 1;
+}
+
+/* 2 — Detection Logic: left column, row 2 */
+.modal-body .setting-group:nth-child(2) {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* 3 — Actions: left column, row 3 */
+.modal-body .setting-group:nth-child(3) {
+    grid-column: 1;
+    grid-row: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* 4 — AI Categories: right column, spans rows 2 & 3 */
+.modal-body .setting-group:nth-child(4) {
+    grid-column: 2;
+    grid-row: 2 / 4; /* spans row 2 and row 3 */
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Slide-in animation for <dialog> */
+#settings-modal {
+    transform: translateY(-20px);
+    opacity: 0;
+    transition: transform 0.35s ease, opacity 0.35s ease;
+}
+
+#settings-modal.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+/* Hidden class */
+
+.hidden {
+    display: none !important;
+}
+
+/* Mask help center */
+
+#mask-help-center {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin: 6px 0 2px 0;
+}
+
+#mask-help-center .help-text {
+    max-width: 600px;
+    margin: 0 auto 8px auto;
+}
+
+/* --- ADDED: FLOATING LOG PANEL --- */
+
+.log-floating-btn {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    background: #333;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    opacity: 0.85;
+    z-index: 5000;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.log-floating-btn:hover {
+    background: #444;
+    opacity: 1;
+}
+
+.log-panel {
+    position: fixed;
+    bottom: 56px;
+    left: 16px;
+    width: 340px;
+    height: 260px;
+    background: #181818;
+    border: 1px solid #444;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.7);
+    display: flex;
+    flex-direction: column;
+    z-index: 5001;
+    overflow: hidden;
+}
+
+.log-panel-header {
+    background: #242424;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: #eee;
+    border-bottom: 1px solid #444;
+}
+
+.log-close-btn {
+    border: none;
+    background: transparent;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.log-close-btn:hover {
+    color: #fff;
+}
+
+.log-content {
+    flex: 1;
+    padding: 8px;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: #ddd;
+    background: #111;
+    overflow-y: auto;
+    white-space: pre-wrap;
+}
+
+/* Responsive tweaks */
+
+@media (max-width: 900px) {
+    .camera-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Compact + centered camera stats */
+.cam-stats {
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+    align-self: center;
+    width: auto;
+    max-width: fit-content;
+    pointer-events: none;
+    margin-bottom: 16px;
+}
+
+.cam-stats-inner {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0,0,0,0.25);
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    width: auto;
+    max-width: fit-content;
+}
+
+.cam-stat-row {
+    color: #aaa;
+    font-size: 0.8rem;
+    display: flex;
+    gap: 6px;
+}
+
+.cam-stat-row .detect-count {
+    color: #ffd859;      /* light yellow */
+    font-weight: 600;
+}
+
+.cam-stat-row .fail-count {
+    color: #ff5a5a;      /* red */
+    font-weight: 600;
+}
+
+/* Single camera mode */
+
+.camera-grid.single-mode {
+    grid-template-columns: 1fr;
+    max-width: 95%;
+    margin: 0 auto;
+}
+
+/* Shared card behavior for both layouts */
+.camera-grid.single-mode .camera-card{
+    width: 100%;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.camera-grid:not(.single-mode) .camera-card {
+    width: 100%;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Single mode: full width */
+.camera-grid.single-mode .camera-viewport {
+    width: 100%;
+    height: 50vh;
+    max-height: 60vh;
+}
+
+/* Dual mode: allow natural width so aspect ratios behave independently */
+.camera-grid:not(.single-mode) .camera-viewport {
+    width: auto;
+    max-width: 100%;
+    height: auto;
+    flex: 0 0 auto;
+}

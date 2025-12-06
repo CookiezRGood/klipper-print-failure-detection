@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <title>Failure Detection Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h2>Failure Detection Dashboard</h2>
+            <div id="status-indicator" class="status-badge">WAITING</div>
+        </header>
+
+        <div class="main-content" id="main-content">
+            <div class="camera-grid" id="camera-grid">
+
+                <!-- CAMERA 1 -->
+                <div class="camera-card" id="card-cam1">
+                    <div class="cam-header"><h3>Primary Camera</h3></div>
+
+                    <div class="camera-viewport" id="cam1-container">
+                        <img id="cam1-img" class="live-feed" alt="">
+                        <div class="disabled-overlay" id="cam1-overlay"><span>DISABLED</span></div>
+                    </div>
+                    
+                    <div class="cam-stats" id="cam1-stats">
+                        <div class="cam-stats-inner">
+                            <div class="cam-stat-row">Detections: <span class="detect-count" id="cam1-detect-count">0</span></div>
+                            <div class="cam-stat-row">Failures: <span class="fail-count" id="cam1-fail-count">0</span></div>
+                        </div>
+                    </div>
+                    
+                    <div class="cam-controls">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="cam1-toggle">
+                            <span class="slider"></span>
+                            <span class="label-text">Active</span>
+                        </label>
+                    </div>
+
+                    <div class="mask-tools">
+                        <button id="cam1-clear-masks" class="secondary-btn">Clear Masks</button>
+                    </div>
+                </div>
+
+                <!-- CAMERA 2 -->
+                <div class="camera-card" id="card-cam2">
+                    <div class="cam-header"><h3>Secondary Camera</h3></div>
+
+                    <div class="camera-viewport" id="cam2-container">
+                        <img id="cam2-img" class="live-feed" alt="">
+                        <div class="disabled-overlay" id="cam2-overlay"><span>DISABLED</span></div>
+                    </div>
+
+                    <div class="cam-stats" id="cam2-stats">
+                        <div class="cam-stats-inner">
+                            <div class="cam-stat-row">Detections: <span class="detect-count" id="cam2-detect-count">0</span></div>
+                            <div class="cam-stat-row">Failures: <span class="fail-count" id="cam2-fail-count">0</span></div>
+                        </div>
+                    </div>
+                    
+                    <div class="cam-controls">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="cam2-toggle">
+                            <span class="slider"></span>
+                            <span class="label-text">Active</span>
+                        </label>
+                    </div>
+
+                    <div class="mask-tools">
+                        <button id="cam2-clear-masks" class="secondary-btn">Clear Masks</button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- CENTER MASK INFO -->
+            <div id="mask-help-center">
+                <p class="help-box">
+                    Click and drag on the camera to add mask zones. Right-click a zone to remove it. Click 'Visualize Mask' to show the mask overlay.
+                </p>
+            </div>
+
+            <!-- HEALTH BAR -->
+            <div class="health-section">
+                <div class="health-header">
+                    <span>Failure Probability: <span id="ssim-val">--%</span></span>
+                    <span>Retries: <span id="retry-val">0/0</span></span>
+                </div>
+                <div class="progress-track">
+                    <span id="monitoring-label" class="monitoring-label"></span>
+                    <div id="confidence-bar" class="progress-fill"></div>
+                </div>
+            </div>
+
+            <!-- CONTROLS -->
+            <div class="controls">
+
+                <button id="mask-toggle-btn" class="secondary-btn">Visualize Mask</button>
+
+                <button id="force-start-btn" class="primary-btn btn-success">
+                    ▶ Start Monitoring
+                </button>
+
+                <button id="open-settings-btn" class="secondary-btn">⚙️ Settings</button>
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-overlay"></div>
+    <dialog id="settings-modal">
+        <div class="modal-header">
+            <h3>Configuration</h3>
+            <button id="close-modal-x" class="icon-btn">×</button>
+        </div>
+
+        <div class="modal-body settings-grid">
+
+            <!-- TOP SECTION -->
+
+            <!-- CAMERA SETUP -->
+            <div class="setting-group">
+                <h4>Camera Setup</h4>
+
+                <div class="setting-row">
+                    <label>Camera Count:</label>
+                    <select id="camera_count">
+                        <option value="1">1 Camera</option>
+                        <option value="2">2 Cameras</option>
+                    </select>
+                </div>
+
+                <div class="setting-row">
+                    <label>Cam 1 URL:</label>
+                    <input type="text" id="cam1_url_input">
+                </div>
+
+                <div class="setting-row">
+                    <label>Cam 1 Aspect Ratio:</label>
+                    <select id="cam1_aspect_ratio">
+                        <option value="16:9">16:9</option>
+                        <option value="4:3">4:3</option>
+                    </select>
+                </div>
+
+                <div class="setting-row" id="cam2-settings-row">
+                    <label>Cam 2 URL:</label>
+                    <input type="text" id="cam2_url_input">
+                </div>
+
+                <div class="setting-row" id="cam2-aspect-row">
+                    <label>Cam 2 Aspect Ratio:</label>
+                    <select id="cam2_aspect_ratio">
+                        <option value="16:9">16:9</option>
+                        <option value="4:3">4:3</option>
+                    </select>
+                </div>
+
+                <div class="setting-row">
+                    <label>Moonraker URL:</label>
+                    <input type="text" id="moonraker_url">
+                </div>
+            </div>
+
+            <!-- LEFT COLUMN -->
+
+            <!-- DETECTION LOGIC -->
+            <div class="setting-group">
+                <h4>Detection Logic</h4>
+
+                <div class="setting-row">
+                    <label>Check Interval (ms):</label>
+                    <input type="number" id="check_interval" min="100" step="100">
+                </div>
+
+                <div class="help-box">Speed of AI checks. Affects responsiveness and CPU usage.</div>
+
+                <div class="setting-row">
+                    <label>Detection Threshold (%):</label>
+                    <input type="number" id="warn_threshold" min="0" max="100">
+                </div>
+
+                <div class="help-box"> Shows yellow early-warning boxes if detections from any enabled category exceed this value.</div>
+            </div>
+
+            <!-- ACTIONS -->
+            <div class="setting-group">
+                <h4>Actions</h4>
+
+                <div class="setting-row">
+                    <label>Max Retries:</label>
+                    <input type="number" id="consecutive_failures">
+                </div>
+                
+                <div class="help-box"> Number of consecutive triggering failures before action is taken.</div>
+
+                <div class="setting-row">
+                    <label>On Failure:</label>
+                    <select id="on_failure">
+                        <option value="nothing">Warning Only</option>
+                        <option value="pause">Pause Print</option>
+                        <option value="cancel">Cancel Print</option>
+                    </select>
+                </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN -->
+
+            <!-- AI CATEGORIES -->
+            <div class="setting-group">
+                <h4>AI Categories</h4>
+
+                <!-- SPAGHETTI -->
+                <div class="category-card">
+                    <h5>Spaghetti</h5>
+                    <label><input type="checkbox" id="cat_spaghetti_enabled"> Detect Spaghetti</label>
+                    <label><input type="checkbox" id="cat_spaghetti_trigger"> Can Trigger Failure</label>
+                    <label>
+                        Trigger Threshold (%):
+                        <input type="number" id="cat_spaghetti_threshold" min="0" max="100" step="1">
+                    </label>
+                </div>
+
+                <!-- STRINGING -->
+                <div class="category-card">
+                    <h5>Stringing</h5>
+                    <label><input type="checkbox" id="cat_stringing_enabled"> Detect Stringing</label>
+                    <label><input type="checkbox" id="cat_stringing_trigger"> Can Trigger Failure</label>
+                    <label>
+                        Trigger Threshold (%):
+                        <input type="number" id="cat_stringing_threshold" min="0" max="100" step="1">
+                    </label>
+                </div>
+
+                <!-- ZITS -->
+                <div class="category-card">
+                    <h5>Zits</h5>
+                    <label><input type="checkbox" id="cat_zits_enabled"> Detect Zits</label>
+                    <label><input type="checkbox" id="cat_zits_trigger"> Can Trigger Failure</label>
+                    <label>
+                        Trigger Threshold (%):
+                        <input type="number" id="cat_zits_threshold" min="0" max="100" step="1">
+                    </label>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="modal-footer">
+            <button id="save-settings-btn" class="primary-btn">Save Configuration</button>
+        </div>
+    </dialog>
+
+    <!-- Floating Log Button + Panel -->
+
+    <!-- Floating toggle button -->
+    <button id="log-toggle-btn" class="log-floating-btn">Logs ▾</button>
+
+    <!-- Log panel -->
+    <div id="log-panel" class="log-panel hidden">
+        <div class="log-panel-header">
+            <span>Plugin Log</span>
+            <button id="log-close-btn" class="log-close-btn">✕</button>
+        </div>
+        <div id="log-content" class="log-content"></div>
+    </div>
+
+    <!-- END BLOCK -->
+
+    <script src="script.js"></script>
+</body>
+</html>

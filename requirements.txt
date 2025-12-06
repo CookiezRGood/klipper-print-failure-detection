@@ -1,0 +1,5 @@
+flask
+numpy<2
+requests
+opencv-python-headless
+tflite-runtime
