@@ -22,13 +22,13 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 - **AI Failure Detection**: Uses a .tflite YOLO-based model to identify failures such as spaghetti, stringing, and zits.
 
-<img width="627" height="562" alt="image" src="https://github.com/user-attachments/assets/05b6f73e-8a87-4586-993d-4e8ce503b709" />
+<img width="676" height="722" alt="image" src="https://github.com/user-attachments/assets/57d3da4e-2748-43e3-aa56-f9ea6d9aeaf1" />
 
 <br><br>
 
-- **Real-Time Web Dashboard**: View live camera feeds with bounding box overlays showing what the AI detects.
+- **Real-Time Web Dashboard**: View live camera feeds with bounding box overlays showing what the AI detects. The number of detections and failures for that session is also tracked below the respective camera.
 
-<img width="1852" height="962" alt="image" src="https://github.com/user-attachments/assets/52b18d96-7d69-4b79-b3e8-78f4c3f75725" />
+<img width="1846" height="963" alt="image" src="https://github.com/user-attachments/assets/4eff5dcc-526b-4307-907e-c0163f2e1817" />
 
 <br><br>
 
@@ -38,13 +38,15 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 <br><br>
 
-- **Multi-Camera Support**: Monitor and analyze up to **two cameras simultaneously**, each with its own prediction score and mask zones.
+- **Multi-Camera Support**: Monitor and analyze up to two cameras simultaneously, each with its own prediction score and mask zones.
   
 - **Dual Thresholds**:
    - **Detection Threshold** (yellow): highlights possible issues.
    - **Trigger Threshold** (red): automatically pauses or cancels the print after a configurable number of retries.
 
 - **Configurable Actions**: Choose to warn only, pause, or cancel the print when a failure is detected.
+
+- **AI Detection Categories**: Choose what types of print failures you want to detect and whether or not they can trigger a failure.
   
 - **Multi-Zone Masking System**:
    - Click-and-drag to define any number of mask rectangles directly on the camera feed.
@@ -53,7 +55,7 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
    - Right-click to delete individual zones.
    - “Clear Masks” button for quick resets.
 
-![masking](https://github.com/user-attachments/assets/c0bfe96e-2dd3-4e3f-9f32-8f80bde18cd5)
+![masking](https://github.com/user-attachments/assets/77823aed-5a6c-4377-a6ef-7170a15fb93b)
 
 <br><br>
 
