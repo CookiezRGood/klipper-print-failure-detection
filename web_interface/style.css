@@ -557,6 +557,101 @@ dialog#settings-modal {
     opacity: 1;
 }
 
+/* AI Categories */
+
+/* Blur the parent settings modal when AI Categories modal is open */
+#settings-modal.blurred {
+    filter: blur(4px);
+    pointer-events: none;
+}
+
+/* Overlay for AI Categories modal */
+#ai-cat-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    z-index: 4500;
+}
+
+#ai-cat-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* AI Category Modal */
+#ai-cat-modal {
+    border: none;
+    border-radius: 12px;
+    padding: 0;
+    width: 80%;
+    max-width: 700px;
+    background: #111;
+    color: var(--text-main);
+    z-index: 4600;
+
+    transform: translateY(-20px);
+    opacity: 0;
+    transition: transform 0.35s ease, opacity 0.35s ease;
+}
+
+#ai-cat-modal.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+/* AI Categories Modal Layout */
+.ai-cat-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 14px;
+}
+
+.ai-col {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* Category Cards in AI Modal */
+.ai-cat-card {
+    background: #1f1f1f;
+    border: 1px solid #333;
+    padding: 12px;
+    border-radius: 10px;
+}
+
+.ai-cat-card h5 {
+    margin: 0 0 8px 0;
+    color: #64b5f6;
+}
+
+.ai-cat-card label {
+    display: block;
+    margin: 6px 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.ai-cat-card input[type="number"] {
+    width: 100%;
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+    background: #111;
+    color: var(--text-main);
+}
+
+@media (max-width: 800px) {
+    .ai-cat-body {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Hidden class */
 
 .hidden {

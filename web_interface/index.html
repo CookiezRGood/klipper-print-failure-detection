@@ -214,41 +214,8 @@
             <!-- RIGHT COLUMN -->
 
             <!-- AI CATEGORIES -->
-            <div class="setting-group">
-                <h4>AI Categories</h4>
-
-                <!-- SPAGHETTI -->
-                <div class="category-card">
-                    <h5>Spaghetti</h5>
-                    <label><input type="checkbox" id="cat_spaghetti_enabled"> Detect Spaghetti</label>
-                    <label><input type="checkbox" id="cat_spaghetti_trigger"> Can Trigger Failure</label>
-                    <label>
-                        Trigger Threshold (%):
-                        <input type="number" id="cat_spaghetti_threshold" min="0" max="100" step="1">
-                    </label>
-                </div>
-
-                <!-- STRINGING -->
-                <div class="category-card">
-                    <h5>Stringing</h5>
-                    <label><input type="checkbox" id="cat_stringing_enabled"> Detect Stringing</label>
-                    <label><input type="checkbox" id="cat_stringing_trigger"> Can Trigger Failure</label>
-                    <label>
-                        Trigger Threshold (%):
-                        <input type="number" id="cat_stringing_threshold" min="0" max="100" step="1">
-                    </label>
-                </div>
-
-                <!-- ZITS -->
-                <div class="category-card">
-                    <h5>Zits</h5>
-                    <label><input type="checkbox" id="cat_zits_enabled"> Detect Zits</label>
-                    <label><input type="checkbox" id="cat_zits_trigger"> Can Trigger Failure</label>
-                    <label>
-                        Trigger Threshold (%):
-                        <input type="number" id="cat_zits_threshold" min="0" max="100" step="1">
-                    </label>
-                </div>
+            <div class="setting-row">
+                <button id="open-ai-cat-btn" class="secondary-btn">Edit AI Categories</button>
             </div>
 
         </div>
@@ -258,6 +225,74 @@
         </div>
     </dialog>
 
+    <!-- AI CATEGORY SETTINGS MODAL -->
+    <div id="ai-cat-overlay"></div>
+    <dialog id="ai-cat-modal">
+        <div class="modal-header">
+            <h3>AI Category Settings</h3>
+            <button id="close-ai-cat-x" class="icon-btn">×</button>
+        </div>
+
+        <div class="ai-cat-body">
+            <!-- LEFT COLUMN -->
+            <div class="ai-col">
+
+                <!-- Spaghetti -->
+                <div class="ai-cat-card">
+                    <h5>Spaghetti</h5>
+                    <label><input type="checkbox" id="cat_spaghetti_enabled"> Enabled</label>
+                    <label><input type="checkbox" id="cat_spaghetti_trigger"> Can Trigger Failure</label>
+                    <label>
+                        Trigger Threshold (%):
+                        <input type="number" id="cat_spaghetti_threshold" min="0" max="100" step="1">
+                    </label>
+                </div>
+
+                <!-- Blob -->
+                <div class="ai-cat-card">
+                    <h5>Blob</h5>
+                    <label><input type="checkbox" id="cat_blob_enabled"> Enabled</label>
+                    <label><input type="checkbox" id="cat_blob_trigger"> Can Trigger Failure</label>
+                    <label>
+                        Trigger Threshold (%):
+                        <input type="number" id="cat_blob_threshold" min="0" max="100" step="1">
+                    </label>
+                </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN -->
+            <div class="ai-col">
+
+                <!-- Crack -->
+                <div class="ai-cat-card">
+                    <h5>Crack</h5>
+                    <label><input type="checkbox" id="cat_crack_enabled"> Enabled</label>
+                    <label><input type="checkbox" id="cat_crack_trigger"> Can Trigger Failure</label>
+                    <label>
+                        Trigger Threshold (%):
+                        <input type="number" id="cat_crack_threshold" min="0" max="100" step="1">
+                    </label>
+                </div>
+
+                <!-- Bed Adhesion Failure -->
+                <div class="ai-cat-card">
+                    <h5>Bed Adhesion Failure</h5>
+                    <label><input type="checkbox" id="cat_baf_enabled"> Enabled</label>
+                    <label><input type="checkbox" id="cat_baf_trigger"> Can Trigger Failure</label>
+                    <label>
+                        Trigger Threshold (%):
+                        <input type="number" id="cat_baf_threshold" min="0" max="100" step="1">
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button id="save-ai-cat-btn" class="primary-btn">Save Category Settings</button>
+        </div>
+    </dialog>
+    
     <!-- Floating Log Button + Panel -->
 
     <!-- Floating toggle button -->

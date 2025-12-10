@@ -1,5 +1,3 @@
-// FULL FILE — ONLY CHANGED main-content SELECTOR
-
 let imageInterval;
 
 // Settings and toggles
@@ -452,21 +450,31 @@ async function loadSettings() {
         document.getElementById("cat_spaghetti_trigger").checked =
             cats.spaghetti?.trigger ?? true;
         document.getElementById("cat_spaghetti_threshold").value =
-            Math.round((cats.spaghetti?.threshold ?? 0.5) * 100);
+            Math.round((cats.spaghetti?.threshold ?? 0.7) * 100);
 
-        document.getElementById("cat_stringing_enabled").checked =
-            cats.stringing?.enabled ?? true;
-        document.getElementById("cat_stringing_trigger").checked =
-            cats.stringing?.trigger ?? false;
-        document.getElementById("cat_stringing_threshold").value =
-            Math.round((cats.stringing?.threshold ?? 0.8) * 100);
+        // Blob
+        document.getElementById("cat_blob_enabled").checked =
+            cats.blob?.enabled ?? true;
+        document.getElementById("cat_blob_trigger").checked =
+            cats.blob?.trigger ?? false;
+        document.getElementById("cat_blob_threshold").value =
+            Math.round((cats.blob?.threshold ?? 0.7) * 100);
 
-        document.getElementById("cat_zits_enabled").checked =
-            cats.zits?.enabled ?? true;
-        document.getElementById("cat_zits_trigger").checked =
-            cats.zits?.trigger ?? false;
-        document.getElementById("cat_zits_threshold").value =
-            Math.round((cats.zits?.threshold ?? 0.8) * 100);
+        // Crack
+        document.getElementById("cat_crack_enabled").checked =
+            cats.crack?.enabled ?? true;
+        document.getElementById("cat_crack_trigger").checked =
+            cats.crack?.trigger ?? false;
+        document.getElementById("cat_crack_threshold").value =
+            Math.round((cats.crack?.threshold ?? 0.7) * 100);
+
+        // Bed Adhesion Failure
+        document.getElementById("cat_baf_enabled").checked =
+            cats["bed adhesion failure"]?.enabled ?? true;
+        document.getElementById("cat_baf_trigger").checked =
+            cats["bed adhesion failure"]?.trigger ?? true;
+        document.getElementById("cat_baf_threshold").value =
+            Math.round((cats["bed adhesion failure"]?.threshold ?? 0.7) * 100);
 
         // Failures
         document.getElementById('consecutive_failures').value =
@@ -511,15 +519,44 @@ document.getElementById('open-settings-btn').addEventListener('click', () => {
     settingsModal.showModal();
     settingsModal.classList.add('show');
     overlay.classList.add('active');
-    mainContent.classList.add('blurred');   // FIXED
+    mainContent.classList.add('blurred');
 });
 
 document.getElementById('close-modal-x').addEventListener('click', () => {
     settingsModal.classList.remove('show');
     settingsModal.close();
     overlay.classList.remove('active');
-    mainContent.classList.remove('blurred');  // FIXED
+    mainContent.classList.remove('blurred');
 });
+
+// --- AI CATEGORY MODAL ---
+const aiCatModal = document.getElementById("ai-cat-modal");
+const aiCatOverlay = document.getElementById("ai-cat-overlay");
+const openAiCatBtn = document.getElementById("open-ai-cat-btn");
+const closeAiCatX = document.getElementById("close-ai-cat-x");
+
+openAiCatBtn.addEventListener("click", () => {
+    aiCatModal.showModal();
+    aiCatModal.classList.add("show");
+
+    aiCatOverlay.classList.add("active");
+
+    // Blur the settings modal behind this one
+    document.getElementById("settings-modal").classList.add("blurred");
+});
+
+closeAiCatX.addEventListener("click", closeAiCatModal);
+
+function closeAiCatModal() {
+    aiCatModal.classList.remove("show");
+    aiCatModal.close();
+
+    aiCatOverlay.classList.remove("active");
+
+    // Unblur the settings modal
+    document.getElementById("settings-modal").classList.remove("blurred");
+}
+
 
 /********************************************************************
  * Save settings
@@ -552,22 +589,27 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         
     // Save category settings
     currentSettings.ai_categories = {
-        spaghetti: {
-            enabled: document.getElementById("cat_spaghetti_enabled").checked,
-            trigger: document.getElementById("cat_spaghetti_trigger").checked,
-            threshold: document.getElementById("cat_spaghetti_threshold").value / 100
-        },
-        stringing: {
-            enabled: document.getElementById("cat_stringing_enabled").checked,
-            trigger: document.getElementById("cat_stringing_trigger").checked,
-            threshold: document.getElementById("cat_stringing_threshold").value / 100
-        },
-        zits: {
-            enabled: document.getElementById("cat_zits_enabled").checked,
-            trigger: document.getElementById("cat_zits_trigger").checked,
-            threshold: document.getElementById("cat_zits_threshold").value / 100
-        }
-    };
+    spaghetti: {
+        enabled: document.getElementById("cat_spaghetti_enabled").checked,
+        trigger: document.getElementById("cat_spaghetti_trigger").checked,
+        threshold: document.getElementById("cat_spaghetti_threshold").value / 100
+    },
+    blob: {
+        enabled: document.getElementById("cat_blob_enabled").checked,
+        trigger: document.getElementById("cat_blob_trigger").checked,
+        threshold: document.getElementById("cat_blob_threshold").value / 100
+    },
+    crack: {
+        enabled: document.getElementById("cat_crack_enabled").checked,
+        trigger: document.getElementById("cat_crack_trigger").checked,
+        threshold: document.getElementById("cat_crack_threshold").value / 100
+    },
+    "bed adhesion failure": {
+        enabled: document.getElementById("cat_baf_enabled").checked,
+        trigger: document.getElementById("cat_baf_trigger").checked,
+        threshold: document.getElementById("cat_baf_threshold").value / 100
+    }
+};
 
     currentSettings.masks = {
         "0": maskZones[0],
@@ -607,6 +649,42 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     settingsModal.close();
     overlay.classList.remove('active');
     mainContent.classList.remove('blurred');  // FIXED
+});
+
+// Save AI Category Settings
+document.getElementById("save-ai-cat-btn").addEventListener("click", async () => {
+
+    currentSettings.ai_categories = {
+        spaghetti: {
+            enabled: document.getElementById("cat_spaghetti_enabled").checked,
+            trigger: document.getElementById("cat_spaghetti_trigger").checked,
+            threshold: document.getElementById("cat_spaghetti_threshold").value / 100
+        },
+        blob: {
+            enabled: document.getElementById("cat_blob_enabled").checked,
+            trigger: document.getElementById("cat_blob_trigger").checked,
+            threshold: document.getElementById("cat_blob_threshold").value / 100
+        },
+        crack: {
+            enabled: document.getElementById("cat_crack_enabled").checked,
+            trigger: document.getElementById("cat_crack_trigger").checked,
+            threshold: document.getElementById("cat_crack_threshold").value / 100
+        },
+        "bed adhesion failure": {
+            enabled: document.getElementById("cat_baf_enabled").checked,
+            trigger: document.getElementById("cat_baf_trigger").checked,
+            threshold: document.getElementById("cat_baf_threshold").value / 100
+        }
+    };
+
+    await fetch('/api/settings', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(currentSettings)
+    });
+
+    closeAiCatModal();
+    alert("AI Category Settings Saved!");
 });
 
 /********************************************************************
