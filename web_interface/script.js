@@ -472,13 +472,13 @@ async function loadSettings() {
         document.getElementById("cat_baf_enabled").checked =
             cats["bed adhesion failure"]?.enabled ?? true;
         document.getElementById("cat_baf_trigger").checked =
-            cats["bed adhesion failure"]?.trigger ?? true;
+            cats["bed adhesion failure"]?.trigger ?? false;
         document.getElementById("cat_baf_threshold").value =
             Math.round((cats["bed adhesion failure"]?.threshold ?? 0.7) * 100);
 
         // Failures
         document.getElementById('consecutive_failures').value =
-            currentSettings.consecutive_failures || 2;
+            currentSettings.consecutive_failures || 3;
 
         // On failure
         document.getElementById('on_failure').value =
@@ -522,41 +522,30 @@ document.getElementById('open-settings-btn').addEventListener('click', () => {
     mainContent.classList.add('blurred');
 });
 
+// ===============================
+// TWO-PAGE SETTINGS SYSTEM
+// ===============================
+const settingsPages = document.getElementById("settings-pages");
+const openAiBtn = document.getElementById("open-ai-cat-btn");
+const backAiBtn = document.getElementById("back-ai-btn");
+
+// Open AI Category Page
+openAiBtn.addEventListener("click", () => {
+    settingsPages.classList.add("show-ai");
+});
+
+// Go back to main settings page
+backAiBtn.addEventListener("click", () => {
+    settingsPages.classList.remove("show-ai");
+});
+
 document.getElementById('close-modal-x').addEventListener('click', () => {
     settingsModal.classList.remove('show');
+    settingsPages.classList.remove("show-ai");
     settingsModal.close();
     overlay.classList.remove('active');
     mainContent.classList.remove('blurred');
 });
-
-// --- AI CATEGORY MODAL ---
-const aiCatModal = document.getElementById("ai-cat-modal");
-const aiCatOverlay = document.getElementById("ai-cat-overlay");
-const openAiCatBtn = document.getElementById("open-ai-cat-btn");
-const closeAiCatX = document.getElementById("close-ai-cat-x");
-
-openAiCatBtn.addEventListener("click", () => {
-    aiCatModal.showModal();
-    aiCatModal.classList.add("show");
-
-    aiCatOverlay.classList.add("active");
-
-    // Blur the settings modal behind this one
-    document.getElementById("settings-modal").classList.add("blurred");
-});
-
-closeAiCatX.addEventListener("click", closeAiCatModal);
-
-function closeAiCatModal() {
-    aiCatModal.classList.remove("show");
-    aiCatModal.close();
-
-    aiCatOverlay.classList.remove("active");
-
-    // Unblur the settings modal
-    document.getElementById("settings-modal").classList.remove("blurred");
-}
-
 
 /********************************************************************
  * Save settings
@@ -683,7 +672,8 @@ document.getElementById("save-ai-cat-btn").addEventListener("click", async () =>
         body: JSON.stringify(currentSettings)
     });
 
-    closeAiCatModal();
+    settingsPages.classList.remove("show-ai");
+
     alert("AI Category Settings Saved!");
 });
 

@@ -120,179 +120,174 @@
             <button id="close-modal-x" class="icon-btn">×</button>
         </div>
 
-        <div class="modal-body settings-grid">
+        <div id="settings-pages">
 
-            <!-- TOP SECTION -->
+            <!-- PAGE 1 — MAIN SETTINGS -->
+            <div id="settings-page">
+                <div class="modal-body settings-grid">
 
-            <!-- CAMERA SETUP -->
-            <div class="setting-group">
-                <h4>Camera Setup</h4>
+                    <!-- CAMERA SETUP -->
+                    <div class="setting-group">
+                        <h4>Camera Setup</h4>
 
-                <div class="setting-row">
-                    <label>Camera Count:</label>
-                    <select id="camera_count">
-                        <option value="1">1 Camera</option>
-                        <option value="2">2 Cameras</option>
-                    </select>
+                        <div class="setting-row">
+                            <label>Camera Count:</label>
+                            <select id="camera_count">
+                                <option value="1">1 Camera</option>
+                                <option value="2">2 Cameras</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-row">
+                            <label>Cam 1 URL:</label>
+                            <input type="text" id="cam1_url_input">
+                        </div>
+
+                        <div class="setting-row">
+                            <label>Cam 1 Aspect Ratio:</label>
+                            <select id="cam1_aspect_ratio">
+                                <option value="16:9">16:9</option>
+                                <option value="4:3">4:3</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-row" id="cam2-settings-row">
+                            <label>Cam 2 URL:</label>
+                            <input type="text" id="cam2_url_input">
+                        </div>
+
+                        <div class="setting-row" id="cam2-aspect-row">
+                            <label>Cam 2 Aspect Ratio:</label>
+                            <select id="cam2_aspect_ratio">
+                                <option value="16:9">16:9</option>
+                                <option value="4:3">4:3</option>
+                            </select>
+                        </div>
+
+                        <div class="setting-row">
+                            <label>Moonraker URL:</label>
+                            <input type="text" id="moonraker_url">
+                        </div>
+                    </div>
+
+                    <!-- DETECTION LOGIC -->
+                    <div class="setting-group">
+                        <h4>Detection Logic</h4>
+
+                        <div class="setting-row">
+                            <label>Check Interval (ms):</label>
+                            <input type="number" id="check_interval" min="100" step="100">
+                        </div>
+
+                        <div class="help-box">Speed of AI checks. Affects responsiveness and CPU usage.</div>
+
+                        <div class="setting-row">
+                            <label>Detection Threshold (%):</label>
+                            <input type="number" id="warn_threshold" min="0" max="100">
+                        </div>
+
+                        <div class="help-box">Shows yellow early-warning boxes if detections from any enabled category exceed this value.</div>
+                    </div>
+
+                    <!-- ACTIONS -->
+                    <div class="setting-group">
+                        <h4>Actions</h4>
+
+                        <div class="setting-row">
+                            <label>Max Retries:</label>
+                            <input type="number" id="consecutive_failures">
+                        </div>
+
+                        <div class="help-box">Number of consecutive triggering failures before action is taken.</div>
+
+                        <div class="setting-row">
+                            <label>On Failure:</label>
+                            <select id="on_failure">
+                                <option value="nothing">Warning Only</option>
+                                <option value="pause">Pause Print</option>
+                                <option value="cancel">Cancel Print</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- AI CATEGORY BUTTON CARD -->
+                    <div class="setting-group">
+                        <h4>AI Categories</h4>
+                        <div class="ai-cat-btn-container">
+                            <button id="open-ai-cat-btn" class="secondary-btn">Edit AI Category Settings</button>
+                        </div>
+                    </div>
+
                 </div>
 
-                <div class="setting-row">
-                    <label>Cam 1 URL:</label>
-                    <input type="text" id="cam1_url_input">
-                </div>
-
-                <div class="setting-row">
-                    <label>Cam 1 Aspect Ratio:</label>
-                    <select id="cam1_aspect_ratio">
-                        <option value="16:9">16:9</option>
-                        <option value="4:3">4:3</option>
-                    </select>
-                </div>
-
-                <div class="setting-row" id="cam2-settings-row">
-                    <label>Cam 2 URL:</label>
-                    <input type="text" id="cam2_url_input">
-                </div>
-
-                <div class="setting-row" id="cam2-aspect-row">
-                    <label>Cam 2 Aspect Ratio:</label>
-                    <select id="cam2_aspect_ratio">
-                        <option value="16:9">16:9</option>
-                        <option value="4:3">4:3</option>
-                    </select>
-                </div>
-
-                <div class="setting-row">
-                    <label>Moonraker URL:</label>
-                    <input type="text" id="moonraker_url">
+                <div class="modal-footer">
+                    <button id="save-settings-btn" class="primary-btn">Save Configuration</button>
                 </div>
             </div>
 
-            <!-- LEFT COLUMN -->
 
-            <!-- DETECTION LOGIC -->
-            <div class="setting-group">
-                <h4>Detection Logic</h4>
+            <!-- PAGE 2 — AI CATEGORY SETTINGS -->
+            <div id="ai-page">
+                <div class="modal-body ai-cat-page-body">
 
-                <div class="setting-row">
-                    <label>Check Interval (ms):</label>
-                    <input type="number" id="check_interval" min="100" step="100">
+                    <h4>AI Category Settings</h4>
+
+                    <div class="ai-cat-body">
+
+                        <div class="ai-col">
+                            <div class="ai-cat-card">
+                                <h5>Spaghetti</h5>
+                                <label><input type="checkbox" id="cat_spaghetti_enabled"> Enabled</label>
+                                <label><input type="checkbox" id="cat_spaghetti_trigger"> Can Trigger Failure</label>
+                                <label>Trigger Threshold (%):
+                                    <input type="number" id="cat_spaghetti_threshold" min="0" max="100">
+                                </label>
+                            </div>
+
+                            <div class="ai-cat-card">
+                                <h5>Blobs</h5>
+                                <label><input type="checkbox" id="cat_blob_enabled"> Enabled</label>
+                                <label><input type="checkbox" id="cat_blob_trigger"> Can Trigger Failure</label>
+                                <label>Trigger Threshold (%):
+                                    <input type="number" id="cat_blob_threshold" min="0" max="100">
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="ai-col">
+                            <div class="ai-cat-card">
+                                <h5>Cracks</h5>
+                                <label><input type="checkbox" id="cat_crack_enabled"> Enabled</label>
+                                <label><input type="checkbox" id="cat_crack_trigger"> Can Trigger Failure</label>
+                                <label>Trigger Threshold (%):
+                                    <input type="number" id="cat_crack_threshold" min="0" max="100">
+                                </label>
+                            </div>
+
+                            <div class="ai-cat-card">
+                                <h5>Bed Adhesion Failure</h5>
+                                <label><input type="checkbox" id="cat_baf_enabled"> Enabled</label>
+                                <label><input type="checkbox" id="cat_baf_trigger"> Can Trigger Failure</label>
+                                <label>Trigger Threshold (%):
+                                    <input type="number" id="cat_baf_threshold" min="0" max="100">
+                                </label>
+                            </div>
+                        </div>
+
+                    </div>
+
                 </div>
 
-                <div class="help-box">Speed of AI checks. Affects responsiveness and CPU usage.</div>
-
-                <div class="setting-row">
-                    <label>Detection Threshold (%):</label>
-                    <input type="number" id="warn_threshold" min="0" max="100">
+                <div class="modal-footer">
+                    <button id="back-ai-btn" class="secondary-btn">Back</button>
+                    <button id="save-ai-cat-btn" class="primary-btn">Save Category Settings</button>
                 </div>
-
-                <div class="help-box"> Shows yellow early-warning boxes if detections from any enabled category exceed this value.</div>
-            </div>
-
-            <!-- ACTIONS -->
-            <div class="setting-group">
-                <h4>Actions</h4>
-
-                <div class="setting-row">
-                    <label>Max Retries:</label>
-                    <input type="number" id="consecutive_failures">
-                </div>
-                
-                <div class="help-box"> Number of consecutive triggering failures before action is taken.</div>
-
-                <div class="setting-row">
-                    <label>On Failure:</label>
-                    <select id="on_failure">
-                        <option value="nothing">Warning Only</option>
-                        <option value="pause">Pause Print</option>
-                        <option value="cancel">Cancel Print</option>
-                    </select>
-                </div>
-
-            </div>
-
-            <!-- RIGHT COLUMN -->
-
-            <!-- AI CATEGORIES -->
-            <div class="setting-row">
-                <button id="open-ai-cat-btn" class="secondary-btn">Edit AI Categories</button>
             </div>
 
         </div>
-
-        <div class="modal-footer">
-            <button id="save-settings-btn" class="primary-btn">Save Configuration</button>
-        </div>
-    </dialog>
-
-    <!-- AI CATEGORY SETTINGS MODAL -->
-    <div id="ai-cat-overlay"></div>
-    <dialog id="ai-cat-modal">
-        <div class="modal-header">
-            <h3>AI Category Settings</h3>
-            <button id="close-ai-cat-x" class="icon-btn">×</button>
-        </div>
-
-        <div class="ai-cat-body">
-            <!-- LEFT COLUMN -->
-            <div class="ai-col">
-
-                <!-- Spaghetti -->
-                <div class="ai-cat-card">
-                    <h5>Spaghetti</h5>
-                    <label><input type="checkbox" id="cat_spaghetti_enabled"> Enabled</label>
-                    <label><input type="checkbox" id="cat_spaghetti_trigger"> Can Trigger Failure</label>
-                    <label>
-                        Trigger Threshold (%):
-                        <input type="number" id="cat_spaghetti_threshold" min="0" max="100" step="1">
-                    </label>
-                </div>
-
-                <!-- Blob -->
-                <div class="ai-cat-card">
-                    <h5>Blob</h5>
-                    <label><input type="checkbox" id="cat_blob_enabled"> Enabled</label>
-                    <label><input type="checkbox" id="cat_blob_trigger"> Can Trigger Failure</label>
-                    <label>
-                        Trigger Threshold (%):
-                        <input type="number" id="cat_blob_threshold" min="0" max="100" step="1">
-                    </label>
-                </div>
-
-            </div>
-
-            <!-- RIGHT COLUMN -->
-            <div class="ai-col">
-
-                <!-- Crack -->
-                <div class="ai-cat-card">
-                    <h5>Crack</h5>
-                    <label><input type="checkbox" id="cat_crack_enabled"> Enabled</label>
-                    <label><input type="checkbox" id="cat_crack_trigger"> Can Trigger Failure</label>
-                    <label>
-                        Trigger Threshold (%):
-                        <input type="number" id="cat_crack_threshold" min="0" max="100" step="1">
-                    </label>
-                </div>
-
-                <!-- Bed Adhesion Failure -->
-                <div class="ai-cat-card">
-                    <h5>Bed Adhesion Failure</h5>
-                    <label><input type="checkbox" id="cat_baf_enabled"> Enabled</label>
-                    <label><input type="checkbox" id="cat_baf_trigger"> Can Trigger Failure</label>
-                    <label>
-                        Trigger Threshold (%):
-                        <input type="number" id="cat_baf_threshold" min="0" max="100" step="1">
-                    </label>
-                </div>
-            </div>
-        </div>
-
-        <div class="modal-footer">
-            <button id="save-ai-cat-btn" class="primary-btn">Save Category Settings</button>
-        </div>
-    </dialog>
     
+    </dialog>
+
     <!-- Floating Log Button + Panel -->
 
     <!-- Floating toggle button -->

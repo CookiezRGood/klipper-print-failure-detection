@@ -17,6 +17,7 @@ body {
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     background-color: #0d0d0d;
     color: var(--text-main);
+    overflow-y: hidden !important;
 }
 
 .container {
@@ -407,13 +408,6 @@ dialog#settings-modal {
     cursor: pointer;
 }
 
-.modal-body {
-    padding: 12px 14px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-}
-
 .setting-group {
     flex: 1 1 240px;
     border: 1px solid var(--border-subtle);
@@ -504,7 +498,7 @@ dialog#settings-modal {
     box-sizing: border-box;
 }
 
-.modal-body {
+#settings-page .modal-body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto 1fr 1fr;
@@ -512,14 +506,21 @@ dialog#settings-modal {
     padding: 12px 14px;
 }
 
+#ai-page .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    display: block;
+    padding: 12px 14px;
+}
+
 /* 1 — Camera Setup: full width, row 1 */
-.modal-body .setting-group:nth-child(1) {
+#settings-page .modal-body .setting-group:nth-child(1) {
     grid-column: 1 / 3; /* span both columns */
     grid-row: 1;
 }
 
 /* 2 — Detection Logic: left column, row 2 */
-.modal-body .setting-group:nth-child(2) {
+#settings-page .modal-body .setting-group:nth-child(2) {
     grid-column: 1;
     grid-row: 2;
     display: flex;
@@ -528,7 +529,7 @@ dialog#settings-modal {
 }
 
 /* 3 — Actions: left column, row 3 */
-.modal-body .setting-group:nth-child(3) {
+#settings-page .modal-body .setting-group:nth-child(3) {
     grid-column: 1;
     grid-row: 3;
     display: flex;
@@ -537,7 +538,7 @@ dialog#settings-modal {
 }
 
 /* 4 — AI Categories: right column, spans rows 2 & 3 */
-.modal-body .setting-group:nth-child(4) {
+#settings-page .modal-body .setting-group:nth-child(4) {
     grid-column: 2;
     grid-row: 2 / 4; /* spans row 2 and row 3 */
     display: flex;
@@ -550,6 +551,10 @@ dialog#settings-modal {
     transform: translateY(-20px);
     opacity: 0;
     transition: transform 0.35s ease, opacity 0.35s ease;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow: hidden;
 }
 
 #settings-modal.show {
@@ -557,53 +562,57 @@ dialog#settings-modal {
     opacity: 1;
 }
 
-/* AI Categories */
-
-/* Blur the parent settings modal when AI Categories modal is open */
-#settings-modal.blurred {
-    filter: blur(4px);
-    pointer-events: none;
+/* ============================
+   SETTINGS MODAL PAGE SYSTEM
+   ============================ */
+#settings-pages {
+    position: relative;
+    width: 200%;
+    height: 100%;
+    display: flex;
+    overflow: hidden;
+    overscroll-behavior: contain;
+    flex-direction: row;
+    transition: transform 0.35s ease;
 }
 
-/* Overlay for AI Categories modal */
-#ai-cat-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.55);
-    backdrop-filter: blur(2px);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.25s ease;
-    z-index: 4500;
+/* Page containers */
+#settings-page,
+#ai-page {
+    width: 50%;
+    flex-shrink: 0;
+    height: 100%;
 }
 
-#ai-cat-overlay.active {
-    opacity: 1;
-    pointer-events: auto;
+#ai-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 100%;
 }
 
-/* AI Category Modal */
-#ai-cat-modal {
-    border: none;
-    border-radius: 12px;
-    padding: 0;
-    width: 80%;
-    max-width: 700px;
-    background: #111;
-    color: var(--text-main);
-    z-index: 4600;
-
-    transform: translateY(-20px);
-    opacity: 0;
-    transition: transform 0.35s ease, opacity 0.35s ease;
+#ai-page h4 {
+    margin-top: 0;
+    margin-bottom: 14px;
 }
 
-#ai-cat-modal.show {
-    transform: translateY(0);
-    opacity: 1;
+/* When AI page is active */
+#settings-pages.show-ai {
+    transform: translateX(-50%);
+}
+
+#ai-page .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 14px;
 }
 
 /* AI Categories Modal Layout */
+
+.ai-cat-page-body {
+    padding-top: 0;
+}
+
 .ai-cat-body {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -644,6 +653,13 @@ dialog#settings-modal {
     border: 1px solid var(--border-subtle);
     background: #111;
     color: var(--text-main);
+    box-sizing: border-box;
+}
+
+.ai-cat-btn-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
 }
 
 @media (max-width: 800px) {
