@@ -198,7 +198,22 @@ def load_model():
         return False
 
     try:
-        interpreter = tflite.Interpreter(model_path=MODEL_PATH)
+        try:
+            interpreter = tflite.Interpreter(
+                model_path=MODEL_PATH,
+                num_threads=2,
+                experimental_delegates=[
+                    tflite.load_delegate("libtensorflowlite_xnnpack_delegate.so")
+                ]
+            )
+            logging.info("Loaded TFLite model with XNNPACK delegate.")
+        except Exception as e:
+            logging.warning(f"XNNPACK delegate unavailable ({e}); falling back to CPU (NOT AN ERROR).")
+            interpreter = tflite.Interpreter(
+                model_path=MODEL_PATH,
+                num_threads=2
+            )
+            
         interpreter.allocate_tensors()
 
         input_details = interpreter.get_input_details()
@@ -334,6 +349,8 @@ def action_stop():
 
 @app.route("/api/action/start_from_macro", methods=["POST"])
 def action_start_from_macro():
+    state["stats"][0] = {"detections": 0, "failures": 0}
+    state["stats"][1] = {"detections": 0, "failures": 0}
     state["monitoring_active"] = True
     state["failure_count"] = 0
     state["action_triggered"] = False
@@ -449,14 +466,6 @@ def background_monitor():
                     r = requests.get(cam["url"], timeout=1.5)
                     if r.status_code != 200:
                         raise ValueError(f"HTTP {r.status_code}")
-
-                    arr = np.frombuffer(r.content, np.uint8)
-                    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                    if img is None:
-                        raise ValueError("Invalid image data")
-
-                    debug = img.copy()
-                    h, w = img.shape[:2]
 
                     # --- APPLY MASKS AND RUN AI ---
                     
