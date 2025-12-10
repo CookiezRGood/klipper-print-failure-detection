@@ -154,6 +154,9 @@ async function updateStatus() {
             document.getElementById("cam2-fail-count").innerText =
                 data.cam_stats["1"].failures;
         }
+        
+        // Store for stats modal
+        lastCamStats = data.cam_stats;
 
         const statusTxt = data.status.toUpperCase().replace('_', ' ');
         statusBadge.innerText = statusTxt;
@@ -546,6 +549,70 @@ document.getElementById('close-modal-x').addEventListener('click', () => {
     overlay.classList.remove('active');
     mainContent.classList.remove('blurred');
 });
+
+/********************************************************************
+ * Per-Category Detection Stats Modal
+ ********************************************************************/
+
+// Store latest cam_stats from /api/status
+let lastCamStats = null;
+
+// Reference to detection boxes on main dashboard
+const cam1StatsCard = document.getElementById("cam1-stats");
+const cam2StatsCard = document.getElementById("cam2-stats");
+
+// Stats modal DOM
+const statsModal = document.getElementById("stats-modal");
+const statsModalTitle = document.getElementById("stats-modal-title");
+const statsModalClose = document.getElementById("close-stats-modal");
+
+function fillStatsModal(camId) {
+    if (!lastCamStats) return;
+
+    const camKey = String(camId);
+    const stats = lastCamStats[camKey];
+    if (!stats || !stats.per_category) return;
+
+    statsModalTitle.textContent =
+        camId === 0 ? "Primary Camera Detection Breakdown" :
+                      "Secondary Camera Detection Breakdown";
+
+    const perCat = stats.per_category;
+
+    function setCounts(key, detId, failId) {
+        const detEl = document.getElementById(detId);
+        const failEl = document.getElementById(failId);
+        if (!detEl || !failEl) return;
+
+        detEl.textContent  = perCat[key]?.detections ?? 0;
+        failEl.textContent = perCat[key]?.failures ?? 0;
+    }
+
+    setCounts("spaghetti",           "stat-det-spaghetti", "stat-fail-spaghetti");
+    setCounts("blob",                "stat-det-blob",      "stat-fail-blob");
+    setCounts("crack",               "stat-det-crack",     "stat-fail-crack");
+    setCounts("bed adhesion failure","stat-det-baf",       "stat-fail-baf");
+}
+
+function openStatsModal(camId) {
+    fillStatsModal(camId);
+    statsModal.showModal();
+    statsModal.classList.add("show");
+    mainContent.classList.add("blurred");
+}
+
+// Make dashboard detection boxes clickable
+if (cam1StatsCard) cam1StatsCard.addEventListener("click", () => openStatsModal(0));
+if (cam2StatsCard) cam2StatsCard.addEventListener("click", () => openStatsModal(1));
+
+if (statsModalClose) {
+    statsModalClose.addEventListener("click", () => {
+    statsModal.close();
+    setTimeout(() => statsModal.close(), 150);
+    mainContent.classList.remove("blurred");
+});
+}
+
 
 /********************************************************************
  * Save settings
