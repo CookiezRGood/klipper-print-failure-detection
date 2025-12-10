@@ -67,6 +67,19 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.tflite")
 
 CLASS_NAMES = ["Spaghetti", "Blob", "Crack", "Bed Adhesion Failure"]
 
+CATEGORY_KEYS = [name.lower() for name in CLASS_NAMES]
+
+def stats_block():
+    """Create a stats dict for one camera, including per-category counters."""
+    return {
+        "detections": 0,
+        "failures": 0,
+        "per_category": {
+            key: {"detections": 0, "failures": 0}
+            for key in CATEGORY_KEYS
+        },
+    }
+
 default_config = {
     "cameras": [
         {"id": 0, "name": "Primary", "url": "http://127.0.0.1/webcam/?action=snapshot", "enabled": True},
@@ -98,12 +111,12 @@ default_config = {
         },
         "crack": {
             "enabled": True,
-            "trigger": True,
+            "trigger": False,
             "threshold": 0.70
         },
         "bed adhesion failure": {
             "enabled": True,
-            "trigger": True,
+            "trigger": False,
             "threshold": 0.70
         },
     },
@@ -146,8 +159,8 @@ state = {
         1: {"frame": None, "score": 0.0},
     },
     "stats": {
-        0: {"detections": 0, "failures": 0},
-        1: {"detections": 0, "failures": 0},
+        0: stats_block(),
+        1: stats_block()
     },
 }
 
@@ -337,8 +350,8 @@ def run_inference(image):
 
 @app.route("/api/action/start", methods=["POST", "GET"])
 def action_start():
-    state["stats"][0] = {"detections": 0, "failures": 0}
-    state["stats"][1] = {"detections": 0, "failures": 0}
+    state["stats"][0] = stats_block()
+    state["stats"][1] = stats_block()
     state["monitoring_active"] = True
     state["failure_count"] = 0
     state["action_triggered"] = False
@@ -354,8 +367,8 @@ def action_stop():
 
 @app.route("/api/action/start_from_macro", methods=["POST"])
 def action_start_from_macro():
-    state["stats"][0] = {"detections": 0, "failures": 0}
-    state["stats"][1] = {"detections": 0, "failures": 0}
+    state["stats"][0] = stats_block()
+    state["stats"][1] = stats_block()
     state["monitoring_active"] = True
     state["failure_count"] = 0
     state["action_triggered"] = False
@@ -534,10 +547,6 @@ def background_monitor():
                     # Keep only detections for enabled categories
                     filtered_dets = []
                     for d in dets:
-                        # Count general detections
-                        if len(filtered_dets) > 0:
-                            state["stats"][cam_id]["detections"] += 1
-    
                         cid = d["class"]
                         label = CLASS_NAMES[cid] if cid < len(CLASS_NAMES) else "unknown"
                         key = label.lower()
@@ -550,9 +559,17 @@ def background_monitor():
 
                         filtered_dets.append(d)
 
+                        # --- Per-category detection counts ---
+                        stats_block = state["stats"].get(cam_id)
+                        if stats_block is not None:
+                            per_cat = stats_block.get("per_category", {})
+                            if key in per_cat:
+                                per_cat[key]["detections"] = per_cat[key].get("detections", 0) + 1
+
+
                     # GENERAL DETECTIONS COUNTER
                     if len(dets) > 0:
-                        state["stats"][cam_id]["detections"] += 1
+                        state["stats"][cam_id]["detections"] += len(dets)
 
                     # SCORE LOGIC
                     if len(dets) == 0:
@@ -571,6 +588,8 @@ def background_monitor():
                     # that is enabled AND allowed to trigger AND above its own threshold?
                     triggered_here = False
                     trigger_conf_here = 0.0
+                    triggered_categories = set()
+                    triggered_instance_count = 0
 
                     for d in dets:
                         x, y, ww, hh = d["box"]
@@ -597,9 +616,11 @@ def background_monitor():
                         if cat_cfg.get("trigger", False) and conf >= trig_thresh:
                             box_color = (0, 0, 255)      # red
                             text_color = (255, 255, 255)
-                            
+
                             triggered_here = True
                             trigger_conf_here = max(trigger_conf_here, conf)
+                            triggered_categories.add(key)
+                            triggered_instance_count += 1
                             
                         else:
                             box_color = (0, 255, 255)    # yellow
@@ -618,9 +639,17 @@ def background_monitor():
                     # For failure logic we track the best "triggerable" confidence
                     if triggered_here and trigger_conf_here > max_frame_score:
                         max_frame_score = trigger_conf_here
-                    
+
                     if triggered_here:
-                        state["stats"][cam_id]["failures"] += 1
+                        state["stats"][cam_id]["failures"] += triggered_instance_count
+
+                        # --- Per-category failure counts ---
+                        stats_block = state["stats"].get(cam_id)
+                        if stats_block is not None:
+                            per_cat = stats_block.get("per_category", {})
+                            for cat_key in triggered_categories:
+                                if cat_key in per_cat:
+                                    per_cat[cat_key]["failures"] = per_cat[cat_key].get("failures", 0) + 1
 
                     state["cameras"][cam_id]["frame"] = debug
 

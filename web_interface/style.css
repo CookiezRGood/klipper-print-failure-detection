@@ -115,6 +115,15 @@ header h2 {
     gap: 4px;
     opacity: 0.9;
     margin-bottom: 16px;
+    transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cam-stats:hover {
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.10);
+    transform: translateY(-1px);
+    cursor: pointer;
+    border-radius: 8px;
 }
 
 .cam-stat-row {
@@ -125,6 +134,14 @@ header h2 {
 
 .camera-card.disabled .cam-stats {
     opacity: 0.3;
+    pointer-events: none !important;
+    cursor: default !important;
+}
+
+.camera-card.disabled .cam-stats:hover {
+    background: none;
+    box-shadow: none;
+    transform: none;
 }
 
 /* Camera viewport */
@@ -777,8 +794,8 @@ dialog#settings-modal {
     align-self: center;
     width: auto;
     max-width: fit-content;
-    pointer-events: none;
     margin-bottom: 16px;
+    cursor: pointer;
 }
 
 .cam-stats-inner {
@@ -847,4 +864,102 @@ dialog#settings-modal {
     max-width: 100%;
     height: auto;
     flex: 0 0 auto;
+}
+
+/* Per-category stats modal */
+
+.stats-modal {
+    max-width: 460px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    padding: 0;
+}
+
+#stats-modal::backdrop {
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.stats-modal .modal-body {
+    padding: 14px 16px 18px 16px;
+}
+
+.stats-table {
+    display: grid;
+    gap: 6px;
+}
+
+.stats-table-header,
+.stats-table-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    align-items: center;
+    font-size: 0.85rem;
+}
+
+.stats-table-header {
+    font-weight: 600;
+    color: #ddd;
+    border-bottom: 1px solid #444;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+}
+
+.stats-table-row span:nth-child(2),
+.stats-table-row span:nth-child(3) {
+    text-align: right;
+}
+
+/* =============================
+   STATS MODAL – Theme
+   ============================= */
+#stats-modal {
+    background: #1b1b1b;
+    color: var(--text-main);
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 0;
+    transform: translateY(-20px);
+    transition: 0.25s ease;
+}
+
+#stats-modal.show {
+    transform: translateY(0);
+}
+
+#stats-modal::backdrop {
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+}
+
+#stats-modal .modal-header {
+    background: #222;
+    border-bottom: 1px solid #333;
+}
+
+#stats-modal .modal-body {
+    background: #1b1b1b;
+}
+
+.stats-table-header {
+    color: var(--text-muted);
+}
+
+.stats-table-row span {
+    color: var(--text-main);
+}
+
+#stats-modal .modal-header h3 {
+    flex: 1;
+    margin-right: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Center numbers under their headers */
+.stats-table-header span:nth-child(2),
+.stats-table-header span:nth-child(3),
+.stats-table-row span:nth-child(2),
+.stats-table-row span:nth-child(3) {
+    text-align: center;
 }

@@ -287,6 +287,47 @@
         </div>
     
     </dialog>
+    
+<!-- Per-category stats modal -->
+    <dialog id="stats-modal" class="modal stats-modal">
+        <div class="modal-header">
+            <h3 id="stats-modal-title">Camera Detection Breakdown</h3>
+            <button id="close-stats-modal" class="icon-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="stats-table">
+                <div class="stats-table-header">
+                    <span>Category</span>
+                    <span>Detections</span>
+                    <span>Failures</span>
+                </div>
+
+                <div class="stats-table-row">
+                    <span>Spaghetti</span>
+                    <span id="stat-det-spaghetti">0</span>
+                    <span id="stat-fail-spaghetti">0</span>
+                </div>
+
+                <div class="stats-table-row">
+                    <span>Blobs</span>
+                    <span id="stat-det-blob">0</span>
+                    <span id="stat-fail-blob">0</span>
+                </div>
+
+                <div class="stats-table-row">
+                    <span>Cracks</span>
+                    <span id="stat-det-crack">0</span>
+                    <span id="stat-fail-crack">0</span>
+                </div>
+
+                <div class="stats-table-row">
+                    <span>Bed Adhesion Failure</span>
+                    <span id="stat-det-baf">0</span>
+                    <span id="stat-fail-baf">0</span>
+                </div>
+            </div>
+        </div>
+    </dialog>
 
     <!-- Floating Log Button + Panel -->
 
