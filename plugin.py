@@ -65,7 +65,7 @@ app = Flask(__name__, static_folder="web_interface")
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "user_settings.json")
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.tflite")
 
-CLASS_NAMES = ["Spaghetti", "Stringing", "Zits"]
+CLASS_NAMES = ["Spaghetti", "Blob", "Crack", "Bed Adhesion Failure"]
 
 default_config = {
     "cameras": [
@@ -88,18 +88,23 @@ default_config = {
     "ai_categories": {
         "spaghetti": {
             "enabled": True,
-            "trigger": True,   # can cancel print
-            "threshold": 0.60  # default trigger threshold (50%)
+            "trigger": True,    
+            "threshold": 0.70
         },
-        "stringing": {
-            "enabled": True,
-            "trigger": False,  # visible but won't cancel by default
-            "threshold": 0.80
-        },
-        "zits": {
+        "blob": {
             "enabled": True,
             "trigger": False,
-            "threshold": 0.80
+            "threshold": 0.70
+        },
+        "crack": {
+            "enabled": True,
+            "trigger": True,
+            "threshold": 0.70
+        },
+        "bed adhesion failure": {
+            "enabled": True,
+            "trigger": True,
+            "threshold": 0.70
         },
     },
 }
