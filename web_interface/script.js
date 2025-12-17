@@ -157,6 +157,7 @@ async function updateStatus() {
         
         // Store for stats modal
         lastCamStats = data.cam_stats;
+        refreshStatsModalIfOpen();
 
         const statusTxt = data.status.toUpperCase().replace('_', ' ');
         statusBadge.innerText = statusTxt;
@@ -297,6 +298,8 @@ function syncMasksToServer() {
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(currentSettings)
     });
+    
+    updateMaskIndicators();
 }
 
 /********************************************************************
@@ -304,6 +307,7 @@ function syncMasksToServer() {
  ********************************************************************/
 function setupMaskDrawing(camId, viewEl) {
 
+    viewEl.classList.add("mask-draw-enabled");
     let drawing = false;
     let startX = 0, startY = 0;
     let tempRect = null;
@@ -411,6 +415,31 @@ function setupMaskDrawing(camId, viewEl) {
     });
 }
 
+function updateMaskIndicators() {
+    [0, 1].forEach(camId => {
+        const view = camId === 0 ? cam1View : cam2View;
+        const zones = maskZones[camId] || [];
+
+        if (!view) return;
+
+        if (zones.length > 0) {
+            // Add indicator
+            if (!view.classList.contains("has-masks")) {
+                view.classList.add("has-masks");
+
+                // Trigger pulse animation
+                view.classList.add("pulse-mask");
+                setTimeout(() => {
+                    view.classList.remove("pulse-mask");
+                }, 2000);
+            }
+        } else {
+            view.classList.remove("has-masks");
+            view.classList.remove("pulse-mask");
+        }
+    });
+}
+
 /********************************************************************
  * Load settings
  ********************************************************************/
@@ -471,13 +500,13 @@ async function loadSettings() {
         document.getElementById("cat_crack_threshold").value =
             Math.round((cats.crack?.threshold ?? 0.7) * 100);
 
-        // Bed Adhesion Failure
-        document.getElementById("cat_baf_enabled").checked =
-            cats["bed adhesion failure"]?.enabled ?? true;
-        document.getElementById("cat_baf_trigger").checked =
-            cats["bed adhesion failure"]?.trigger ?? false;
-        document.getElementById("cat_baf_threshold").value =
-            Math.round((cats["bed adhesion failure"]?.threshold ?? 0.7) * 100);
+        // Warping
+        document.getElementById("cat_warping_enabled").checked =
+            cats.warping?.enabled ?? true;
+        document.getElementById("cat_warping_trigger").checked =
+            cats.warping?.trigger ?? false;
+        document.getElementById("cat_warping_threshold").value =
+            Math.round((cats.warping?.threshold ?? 0.7) * 100);
 
         // Failures
         document.getElementById('consecutive_failures').value =
@@ -491,6 +520,7 @@ async function loadSettings() {
         const m = currentSettings.masks || {};
         maskZones[0] = Array.isArray(m["0"]) ? [...m["0"]] : [];
         maskZones[1] = Array.isArray(m["1"]) ? [...m["1"]] : [];
+        updateMaskIndicators();
 
         // Per-camera aspect ratios
         document.getElementById('cam1_aspect_ratio').value =
@@ -588,13 +618,27 @@ function fillStatsModal(camId) {
         failEl.textContent = perCat[key]?.failures ?? 0;
     }
 
-    setCounts("spaghetti",           "stat-det-spaghetti", "stat-fail-spaghetti");
-    setCounts("blob",                "stat-det-blob",      "stat-fail-blob");
-    setCounts("crack",               "stat-det-crack",     "stat-fail-crack");
-    setCounts("bed adhesion failure","stat-det-baf",       "stat-fail-baf");
+    setCounts("spaghetti", "stat-det-spaghetti", "stat-fail-spaghetti");
+    setCounts("blob",      "stat-det-blob",      "stat-fail-blob");
+    setCounts("warping",   "stat-det-warping",   "stat-fail-warping");
+    setCounts("crack",     "stat-det-crack",     "stat-fail-crack");
 }
 
+function refreshStatsModalIfOpen() {
+    if (!statsModal.open) return;
+
+    // Determine which camera modal is showing
+    if (statsModalTitle.textContent.includes("Primary")) {
+        fillStatsModal(0);
+    } else if (statsModalTitle.textContent.includes("Secondary")) {
+        fillStatsModal(1);
+    }
+}
+
+let activeStatsCamId = null;
+
 function openStatsModal(camId) {
+    activeStatsCamId = camId;
     fillStatsModal(camId);
     statsModal.showModal();
     statsModal.classList.add("show");
@@ -613,6 +657,33 @@ if (statsModalClose) {
 });
 }
 
+const resetStatsBtn = document.getElementById("reset-stats-btn");
+
+if (resetStatsBtn) {
+    resetStatsBtn.addEventListener("click", async () => {
+        if (activeStatsCamId === null) return;
+
+        try {
+            await fetch(`/api/stats/reset/${activeStatsCamId}`, {
+                method: "POST"
+            });
+        } catch (err) {
+            console.error("Failed to reset stats", err);
+            return;
+        }
+
+        // Immediately refresh local copy
+        if (lastCamStats && lastCamStats[String(activeStatsCamId)]) {
+            lastCamStats[String(activeStatsCamId)] = {
+                detections: 0,
+                failures: 0,
+                per_category: {}
+            };
+        }
+
+        fillStatsModal(activeStatsCamId);
+    });
+}
 
 /********************************************************************
  * Save settings
@@ -660,10 +731,10 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         trigger: document.getElementById("cat_crack_trigger").checked,
         threshold: document.getElementById("cat_crack_threshold").value / 100
     },
-    "bed adhesion failure": {
-        enabled: document.getElementById("cat_baf_enabled").checked,
-        trigger: document.getElementById("cat_baf_trigger").checked,
-        threshold: document.getElementById("cat_baf_threshold").value / 100
+    warping: {
+        enabled: document.getElementById("cat_warping_enabled").checked,
+        trigger: document.getElementById("cat_warping_trigger").checked,
+        threshold: document.getElementById("cat_warping_threshold").value / 100
     }
 };
 
@@ -726,10 +797,10 @@ document.getElementById("save-ai-cat-btn").addEventListener("click", async () =>
             trigger: document.getElementById("cat_crack_trigger").checked,
             threshold: document.getElementById("cat_crack_threshold").value / 100
         },
-        "bed adhesion failure": {
-            enabled: document.getElementById("cat_baf_enabled").checked,
-            trigger: document.getElementById("cat_baf_trigger").checked,
-            threshold: document.getElementById("cat_baf_threshold").value / 100
+        warping: {
+            enabled: document.getElementById("cat_warping_enabled").checked,
+            trigger: document.getElementById("cat_warping_trigger").checked,
+            threshold: document.getElementById("cat_warping_threshold").value / 100
         }
     };
 

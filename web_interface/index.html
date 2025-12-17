@@ -265,11 +265,11 @@
                             </div>
 
                             <div class="ai-cat-card">
-                                <h5>Bed Adhesion Failure</h5>
-                                <label><input type="checkbox" id="cat_baf_enabled"> Enabled</label>
-                                <label><input type="checkbox" id="cat_baf_trigger"> Can Trigger Failure</label>
+                                <h5>Warping</h5>
+                                <label><input type="checkbox" id="cat_warping_enabled"> Enabled</label>
+                                <label><input type="checkbox" id="cat_warping_trigger"> Can Trigger Failure</label>
                                 <label>Trigger Threshold (%):
-                                    <input type="number" id="cat_baf_threshold" min="0" max="100">
+                                    <input type="number" id="cat_warping_threshold" min="0" max="100">
                                 </label>
                             </div>
                         </div>
@@ -321,11 +321,16 @@
                 </div>
 
                 <div class="stats-table-row">
-                    <span>Bed Adhesion Failure</span>
-                    <span id="stat-det-baf">0</span>
-                    <span id="stat-fail-baf">0</span>
+                    <span>Warping</span>
+                    <span id="stat-det-warping">0</span>
+                    <span id="stat-fail-warping">0</span>
                 </div>
             </div>
+        </div>
+        <div class="modal-footer">
+            <button id="reset-stats-btn" class="secondary-btn">
+                Reset Counters
+            </button>
         </div>
     </dialog>
 

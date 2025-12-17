@@ -65,7 +65,7 @@ app = Flask(__name__, static_folder="web_interface")
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "user_settings.json")
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.tflite")
 
-CLASS_NAMES = ["Spaghetti", "Blob", "Crack", "Bed Adhesion Failure"]
+CLASS_NAMES = ["Spaghetti", "Blob", "Warping", "Crack"]
 
 CATEGORY_KEYS = [name.lower() for name in CLASS_NAMES]
 
@@ -79,6 +79,17 @@ def stats_block():
             for key in CATEGORY_KEYS
         },
     }
+
+def normalize_per_category(stats):
+    """
+    Ensure all current CATEGORY_KEYS exist in per_category stats.
+    Allows safe migration when model classes change.
+    """
+    per_cat = stats.get("per_category", {})
+    for key in CATEGORY_KEYS:
+        if key not in per_cat:
+            per_cat[key] = {"detections": 0, "failures": 0}
+    stats["per_category"] = per_cat
 
 default_config = {
     "cameras": [
@@ -101,7 +112,7 @@ default_config = {
     "ai_categories": {
         "spaghetti": {
             "enabled": True,
-            "trigger": True,    
+            "trigger": True,
             "threshold": 0.70
         },
         "blob": {
@@ -109,12 +120,12 @@ default_config = {
             "trigger": False,
             "threshold": 0.70
         },
-        "crack": {
+        "warping": {
             "enabled": True,
             "trigger": False,
             "threshold": 0.70
         },
-        "bed adhesion failure": {
+        "crack": {
             "enabled": True,
             "trigger": False,
             "threshold": 0.70
@@ -163,6 +174,10 @@ state = {
         1: stats_block()
     },
 }
+
+# Normalize stats categories (handles model upgrades)
+for cam_id in state["stats"]:
+    normalize_per_category(state["stats"][cam_id])
 
 # ================================================================
 #   CAMERA READY SETUP
@@ -352,6 +367,8 @@ def run_inference(image):
 def action_start():
     state["stats"][0] = stats_block()
     state["stats"][1] = stats_block()
+    normalize_per_category(state["stats"][0])
+    normalize_per_category(state["stats"][1])
     state["monitoring_active"] = True
     state["failure_count"] = 0
     state["action_triggered"] = False
@@ -369,6 +386,8 @@ def action_stop():
 def action_start_from_macro():
     state["stats"][0] = stats_block()
     state["stats"][1] = stats_block()
+    normalize_per_category(state["stats"][0])
+    normalize_per_category(state["stats"][1])
     state["monitoring_active"] = True
     state["failure_count"] = 0
     state["action_triggered"] = False
@@ -379,6 +398,16 @@ def action_start_from_macro():
 @app.route("/api/action/toggle_mask", methods=["POST"])
 def toggle_mask():
     state["show_mask_overlay"] = request.json.get("show", False)
+    return jsonify({"success": True})
+
+@app.route("/api/stats/reset/<int:cam_id>", methods=["POST"])
+def reset_camera_stats(cam_id):
+    if cam_id not in state["stats"]:
+        return jsonify({"success": False, "error": "Invalid camera"}), 400
+
+    state["stats"][cam_id] = stats_block()
+
+    logging.info(f"Stats reset for camera {cam_id}")
     return jsonify({"success": True})
 
 # ================================================================
@@ -567,9 +596,9 @@ def background_monitor():
                                 per_cat[key]["detections"] = per_cat[key].get("detections", 0) + 1
 
 
-                    # GENERAL DETECTIONS COUNTER
-                    if len(dets) > 0:
-                        state["stats"][cam_id]["detections"] += len(dets)
+                    # GENERAL DETECTIONS COUNTER (ENABLED CATEGORIES ONLY)
+                    if len(filtered_dets) > 0:
+                        state["stats"][cam_id]["detections"] += len(filtered_dets)
 
                     # SCORE LOGIC
                     if len(dets) == 0:

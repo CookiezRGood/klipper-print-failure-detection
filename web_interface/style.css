@@ -866,6 +866,75 @@ dialog#settings-modal {
     flex: 0 0 auto;
 }
 
+/* =============================
+   MASK INDICATOR
+   ============================= */
+
+/* Mask drawing cursor */
+.camera-viewport.mask-draw-enabled {
+    cursor: crosshair;
+}
+
+/* Camera has masks indicator */
+.camera-viewport.has-masks::after {
+    content: "";
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ff00ff; /* mask color */
+    opacity: 0.75;
+    box-shadow: 0 0 4px rgba(255, 0, 255, 0.6);
+    pointer-events: none;
+}
+
+/* Mask indicator pulse animation */
+@keyframes mask-pulse {
+    0% {
+        transform: scale(1);
+        opacity: 0.6;
+    }
+    50% {
+        transform: scale(1.35);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 0.75;
+    }
+}
+
+/* Pulse only briefly when applied */
+.camera-viewport.has-masks.pulse-mask::after {
+    animation: mask-pulse 0.9s ease-in-out 2;
+}
+
+/* Mask tooltip */
+.camera-viewport.has-masks::before {
+    content: "Mask active";
+    position: absolute;
+    top: 4px;
+    right: 22px;
+    background: rgba(20, 20, 20, 0.9);
+    color: #fff;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+/* Show tooltip on hover */
+.camera-viewport.has-masks:hover::before {
+    opacity: 1;
+    transform: translateY(0);
+}
+
 /* Per-category stats modal */
 
 .stats-modal {
@@ -873,6 +942,23 @@ dialog#settings-modal {
     border-radius: 8px;
     border: 1px solid #444;
     padding: 0;
+}
+
+.stats-modal .modal-footer {
+    padding: 10px 14px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+#reset-stats-btn {
+    background: var(--danger);
+    color: #ffffff;
+    font-weight: 600;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.35);
+}
+
+#reset-stats-btn:hover {
+    opacity: 0.9;
 }
 
 #stats-modal::backdrop {
