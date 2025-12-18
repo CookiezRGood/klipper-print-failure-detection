@@ -456,6 +456,10 @@ async function loadSettings() {
         toggleCamera(0, cam1.enabled);
         toggleCamera(1, cam2.enabled);
 
+        // Loop Control
+        document.getElementById("infer_every_n_loops").value =
+            currentSettings.infer_every_n_loops || 1;
+        
         // Camera count
         document.getElementById('camera_count').value =
             currentSettings.camera_count || 2;
@@ -720,6 +724,9 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
 
     currentSettings.on_failure =
         document.getElementById('on_failure').value;
+        
+    currentSettings.infer_every_n_loops =
+        parseInt(document.getElementById("infer_every_n_loops").value);
         
     // Save category settings
     currentSettings.ai_categories = {

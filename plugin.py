@@ -60,6 +60,8 @@ logging.warning = patched_warning
 #   APP + SETTINGS
 # ================================================================
 
+ENABLE_TIMING_LOGS = False   # set False to disable all timing logs
+
 app = Flask(__name__, static_folder="web_interface")
 
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "user_settings.json")
@@ -101,6 +103,7 @@ default_config = {
     "check_interval": 500,
     "consecutive_failures": 3,
     "on_failure": "pause",
+    "infer_every_n_loops": 1,
     "cam1_aspect_ratio": "4:3",
     "cam2_aspect_ratio": "4:3",
 
@@ -178,6 +181,12 @@ state = {
     },
 }
 
+# Cache last inference results per camera
+last_inference = {
+    0: {"score": 0.0, "dets": []},
+    1: {"score": 0.0, "dets": []},
+}
+
 # Normalize stats categories (handles model upgrades)
 for cam_id in state["stats"]:
     normalize_per_category(state["stats"][cam_id])
@@ -185,6 +194,12 @@ for cam_id in state["stats"]:
 # ================================================================
 #   CAMERA READY SETUP
 # ================================================================
+
+CAM_SESSIONS = {
+    0: requests.Session(),
+    1: requests.Session(),
+}
+MOONRAKER_SESSION = requests.Session()
 
 camera_ready = {0: False, 1: False}
 
@@ -194,7 +209,7 @@ def wait_for_camera(cam_id, url, timeout_seconds=8):
 
     while time.time() - start < timeout_seconds:
         try:
-            r = requests.get(url, timeout=1.2)
+            r = CAM_SESSIONS.get(cam_id, requests).get(url, timeout=1.2)
             if r.status_code == 200:
                 logging.info(f"Camera {cam_id} is ready.")
                 camera_ready[cam_id] = True
@@ -234,21 +249,10 @@ def load_model():
         return False
 
     try:
-        try:
-            interpreter = tflite.Interpreter(
-                model_path=MODEL_PATH,
-                num_threads=2,
-                experimental_delegates=[
-                    tflite.load_delegate("libtensorflowlite_xnnpack_delegate.so")
-                ]
-            )
-            logging.info("Loaded TFLite model with XNNPACK delegate.")
-        except Exception as e:
-            logging.warning(f"XNNPACK delegate unavailable ({e}); falling back to CPU (NOT AN ERROR).")
-            interpreter = tflite.Interpreter(
-                model_path=MODEL_PATH,
-                num_threads=2
-            )
+        interpreter = tflite.Interpreter(
+            model_path=MODEL_PATH,
+            num_threads=2
+        )
             
         interpreter.allocate_tensors()
 
@@ -427,7 +431,7 @@ def reset_camera_stats(cam_id):
 def get_printer_state():
     url = config.get("moonraker_url", "").rstrip("/")
     try:
-        r = requests.get(f"{url}/printer/objects/query?print_stats", timeout=0.4)
+        r = MOONRAKER_SESSION.get(f"{url}/printer/objects/query?print_stats", timeout=0.4)
         if r.status_code == 200:
             return r.json()["result"]["status"]["print_stats"]["state"]
     except:
@@ -472,8 +476,21 @@ def background_monitor():
     logging.info("Monitor thread started.")
 
     while True:
+        loop_start = time.perf_counter()
+        state["_infer_tick"] = state.get("_infer_tick", 0) + 1
+        infer_every = max(1, int(config.get("infer_every_n_loops", 1)))
+        do_infer = (state["_infer_tick"] % infer_every == 0)
+        
+        if ENABLE_TIMING_LOGS:
+            t_state = t_cameras = t_infer = t_draw = 0.0
         try:
+            if ENABLE_TIMING_LOGS:
+                t0 = time.perf_counter()
+
             klip_state = get_printer_state()
+
+            if ENABLE_TIMING_LOGS:
+                t_state += time.perf_counter() - t0
 
             # Auto-disable only if NOT manually started
             if klip_state != "printing" and not state["manual_override"]:
@@ -520,7 +537,16 @@ def background_monitor():
                     # If ready once, NEVER skip the block again
 
                     # 2. NORMAL FRAME FETCH
-                    r = requests.get(cam["url"], timeout=1.5)
+                    sess = CAM_SESSIONS.get(cam_id, requests)
+                    
+                    if ENABLE_TIMING_LOGS:
+                        t0 = time.perf_counter()
+
+                    r = sess.get(cam["url"], timeout=1.5)
+
+                    if ENABLE_TIMING_LOGS:
+                        t_cameras += time.perf_counter() - t0
+                    
                     if r.status_code != 200:
                         raise ValueError(f"HTTP {r.status_code}")
 
@@ -576,45 +602,44 @@ def background_monitor():
                         state["cameras"][cam_id]["frame"] = debug
                         continue
 
-                    # Run AI
-                    score, dets = run_inference(img)
+                    # Run AI (skipped on some loops, reuse last result)
+                    if do_infer:
+                        if ENABLE_TIMING_LOGS:
+                            t0 = time.perf_counter()
 
-                    # CATEGORY FILTERING (enabled only)
+                        score, dets = run_inference(img)
+
+                        if ENABLE_TIMING_LOGS:
+                            t_infer += time.perf_counter() - t0
+
+                        # Cache results
+                        last_inference[cam_id]["score"] = score
+                        last_inference[cam_id]["dets"] = dets
+                    else:
+                        # Reuse last inference result
+                        cached = last_inference.get(cam_id, {})
+                        score = cached.get("score", 0.0)
+                        dets = cached.get("dets", [])
+
                     categories = config.get("ai_categories", {})
 
-                    enabled_dets = []
-                    for d in dets:
-                        cid = d["class"]
-                        label = CLASS_NAMES[cid] if cid < len(CLASS_NAMES) else "unknown"
-                        key = label.lower()
-                        cat_cfg = categories.get(key)
-
-                        # If disabled: skip entirely
-                        if cat_cfg and not cat_cfg.get("enabled", True):
-                            continue
-
-                        enabled_dets.append(d)
-
-                    # Category settings
-                    categories = config.get("ai_categories", {})
-
-                    # For failure logic: was there any detection from a category
-                    # that is enabled AND allowed to trigger AND above its own threshold?
+                    # For failure logic...
                     triggered_here = False
                     trigger_conf_here = 0.0
                     triggered_categories = set()
                     triggered_instance_count = 0
 
+                    if ENABLE_TIMING_LOGS:
+                        t0_draw = time.perf_counter()
                     filtered_dets = []
-                    for d in enabled_dets:
+                    for d in dets:
                         x, y, ww, hh = d["box"]
                         conf = float(d["conf"])
                         cid = d["class"]
 
                         label = CLASS_NAMES[cid] if cid < len(CLASS_NAMES) else "FAIL"
-                        key = label.lower()  # "Spaghetti" -> "spaghetti"
+                        key = label.lower()
 
-                        # Category config
                         cat_cfg = categories.get(key)
                         if not cat_cfg or not cat_cfg.get("enabled", True):
                             continue
@@ -622,20 +647,19 @@ def background_monitor():
                         detect_thresh = float(cat_cfg["detect_threshold"])
                         trigger_thresh = float(cat_cfg["trigger_threshold"])
 
-                        # Ignore below detection threshold
                         if conf < detect_thresh:
                             continue
-                            
-                        filtered_dets.append(d)
-                            
-                        # --- Per-category detection counts ---
-                        stats_block = state["stats"].get(cam_id)
-                        if stats_block is not None:
-                            per_cat = stats_block.get("per_category", {})
-                            if key in per_cat:
-                                per_cat[key]["detections"] = per_cat[key].get("detections", 0) + 1
 
-                        # Triggering detection
+                        filtered_dets.append(d)
+
+                        # per-category detections (only count on real inference)
+                        if do_infer:
+                            stats_block = state["stats"].get(cam_id)
+                            if stats_block is not None:
+                                per_cat = stats_block.get("per_category", {})
+                                if key in per_cat:
+                                    per_cat[key]["detections"] = per_cat[key].get("detections", 0) + 1
+
                         if cat_cfg.get("trigger", False) and conf >= trigger_thresh:
                             box_color = (0, 0, 255)
                             text_color = (255, 255, 255)
@@ -644,7 +668,6 @@ def background_monitor():
                             triggered_categories.add(key)
                             triggered_instance_count += 1
                         else:
-                            # Early warning detection
                             box_color = (0, 255, 255)
                             text_color = (0, 0, 0)
 
@@ -657,9 +680,13 @@ def background_monitor():
                         cv2.rectangle(debug, (x, ty-th-2), (x+tw, ty+2), box_color, -1)
                         cv2.putText(debug, text, (x, ty),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 1)
-                                    
+                    
+                    if ENABLE_TIMING_LOGS:
+                        t_draw += time.perf_counter() - t0_draw
+                    
                     if len(filtered_dets) > 0:
-                        state["stats"][cam_id]["detections"] += len(filtered_dets)
+                        if do_infer:
+                            state["stats"][cam_id]["detections"] += len(filtered_dets)
                         state["cameras"][cam_id]["score"] = max(float(d["conf"]) for d in filtered_dets)
                     else:
                         state["cameras"][cam_id]["score"] = 0.0
@@ -668,7 +695,7 @@ def background_monitor():
                     if triggered_here and trigger_conf_here > max_frame_score:
                         max_frame_score = trigger_conf_here
 
-                    if triggered_here:
+                    if triggered_here and do_infer:
                         state["stats"][cam_id]["failures"] += triggered_instance_count
 
                         # --- Per-category failure counts ---
@@ -689,9 +716,6 @@ def background_monitor():
                     state["cameras"][cam_id]["score"] = 0.0
                     state["cameras"][cam_id]["frame"] = None
                     continue
-
-                except Exception as e:
-                    logging.error(f"Camera {cam_id} error: {e}")
 
             # Status machine
             if not ai_enabled:
@@ -724,7 +748,24 @@ def background_monitor():
         except Exception as e:
             logging.error(f"Loop error: {e}")
 
-        time.sleep(float(config["check_interval"]) / 1000.0)
+        interval_s = float(config.get("check_interval", 500)) / 1000.0
+        elapsed = time.perf_counter() - loop_start
+        
+        if ENABLE_TIMING_LOGS:
+            total = elapsed
+            logging.info(
+                f"[TIMING] loop={total*1000:.1f}ms | "
+                f"state={t_state*1000:.1f}ms | "
+                f"cam={t_cameras*1000:.1f}ms | "
+                f"infer={t_infer*1000:.1f}ms | "
+                f"draw={t_draw*1000:.1f}ms"
+            )
+        
+        sleep_s = interval_s - elapsed
+        if sleep_s > 0:
+            time.sleep(sleep_s)
+        else:
+            time.sleep(0.001)
 
 # Start thread
 threading.Thread(target=background_monitor, daemon=True).start()

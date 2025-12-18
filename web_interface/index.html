@@ -170,7 +170,7 @@
                         </div>
                     </div>
 
-                    <!-- DETECTION LOGIC -->
+                    <!-- FAILURE RESPONSE -->
                     <div class="setting-group">
                         <h4>Failure Response</h4>
 
@@ -179,23 +179,51 @@
                             <input type="number" id="check_interval" min="100" step="100">
                         </div>
 
-                        <div class="help-box">Speed of AI checks. Affects responsiveness and CPU usage.</div>
+                        <div class="help-tooltip">
+                            <span class="help-icon">?</span>
+                            <div class="help-tooltip-text">
+                                How often printer and camera state are checked. Lower values update faster but use more CPU.
+                            </div>
+                        </div>
 
+                        <div class="setting-row">
+                            <label for="infer_every_n_loops">AI Inference Rate:</label>
+                            <select id="infer_every_n_loops">
+                                <option value="1">Every frame (max accuracy)</option>
+                                <option value="2">Every 2 frames (recommended)</option>
+                                <option value="3">Every 3 frames (high performance)</option>
+                                <option value="4">Every 4 frames (higher performance)</option>
+                            </select>
+                        </div>
+
+                        <div class="help-tooltip">
+                            <span class="help-icon">?</span>
+                            <div class="help-tooltip-text">
+                                Runs AI less often to reduce CPU load but will slightly delay detection. "frames" = Check Interval.
+                            </div>
+                        </div>
+                        
                         <div class="setting-row">
                             <label>Max Retries:</label>
                             <input type="number" id="consecutive_failures">
                         </div>
 
-                        <div class="help-box">Number of consecutive triggering failures before action is taken.</div>
+                        <div class="help-tooltip">
+                            <span class="help-icon">?</span>
+                            <div class="help-tooltip-text">
+                                Number of consecutive failures detected before action is taken.
+                            </div>
+                        </div>
 
                         <div class="setting-row">
-                            <label>On Failure:</label>
+                            <label>Failure Action:</label>
                             <select id="on_failure">
                                 <option value="nothing">Warning Only</option>
                                 <option value="pause">Pause Print</option>
                                 <option value="cancel">Cancel Print</option>
                             </select>
                         </div>
+                        
                     </div>
 
                     <!-- AI CATEGORY BUTTON CARD -->
