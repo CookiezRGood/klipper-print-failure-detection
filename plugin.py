@@ -99,7 +99,6 @@ default_config = {
     "camera_count": 1,
     "moonraker_url": "http://127.0.0.1:7125",
     "check_interval": 500,
-    "warn_threshold": 0.30,
     "consecutive_failures": 3,
     "on_failure": "pause",
     "cam1_aspect_ratio": "4:3",
@@ -113,22 +112,26 @@ default_config = {
         "spaghetti": {
             "enabled": True,
             "trigger": True,
-            "threshold": 0.70
+            "detect_threshold": 0.30,
+            "trigger_threshold": 0.70
         },
         "blob": {
             "enabled": True,
             "trigger": False,
-            "threshold": 0.70
+            "detect_threshold": 0.30,
+            "trigger_threshold": 0.70
         },
         "warping": {
             "enabled": True,
             "trigger": False,
-            "threshold": 0.70
+            "detect_threshold": 0.30,
+            "trigger_threshold": 0.70
         },
         "crack": {
             "enabled": True,
             "trigger": False,
-            "threshold": 0.70
+            "detect_threshold": 0.30,
+            "trigger_threshold": 0.70
         },
     },
 }
@@ -346,7 +349,14 @@ def run_inference(image):
 
         out = interpreter.get_tensor(output_details[0]["index"])
 
-        conf_thresh = float(config.get("warn_threshold", 0.3))
+        cats = config.get("ai_categories", {})
+        detect_thresholds = [
+            c.get("detect_threshold", 0.3)
+            for c in cats.values()
+            if c.get("enabled", True)
+        ]
+
+        conf_thresh = min(detect_thresholds) if detect_thresholds else 0.3
         detections = post_process_yolo(out, orig_w, orig_h, conf_thresh)
 
         if not detections:
@@ -569,46 +579,21 @@ def background_monitor():
                     # Run AI
                     score, dets = run_inference(img)
 
-                    # CATEGORY FILTERING
+                    # CATEGORY FILTERING (enabled only)
                     categories = config.get("ai_categories", {})
-                    warn_thresh = float(config.get("warn_threshold", 0.3))
 
-                    # Keep only detections for enabled categories
-                    filtered_dets = []
+                    enabled_dets = []
                     for d in dets:
                         cid = d["class"]
                         label = CLASS_NAMES[cid] if cid < len(CLASS_NAMES) else "unknown"
                         key = label.lower()
-                        cat_cfg = categories.get(key, None)
+                        cat_cfg = categories.get(key)
 
-                        # If category missing: assume enabled (matches old behavior)
-                        # If disabled: skip it entirely
+                        # If disabled: skip entirely
                         if cat_cfg and not cat_cfg.get("enabled", True):
                             continue
 
-                        filtered_dets.append(d)
-
-                        # --- Per-category detection counts ---
-                        stats_block = state["stats"].get(cam_id)
-                        if stats_block is not None:
-                            per_cat = stats_block.get("per_category", {})
-                            if key in per_cat:
-                                per_cat[key]["detections"] = per_cat[key].get("detections", 0) + 1
-
-
-                    # GENERAL DETECTIONS COUNTER (ENABLED CATEGORIES ONLY)
-                    if len(filtered_dets) > 0:
-                        state["stats"][cam_id]["detections"] += len(filtered_dets)
-
-                    # SCORE LOGIC
-                    if len(dets) == 0:
-                        state["cameras"][cam_id]["score"] = 0.0
-                    else:
-                        score = max(float(d["conf"]) for d in dets)
-                        state["cameras"][cam_id]["score"] = score
-
-                    # Replace original dets with filtered version
-                    dets = filtered_dets
+                        enabled_dets.append(d)
 
                     # Category settings
                     categories = config.get("ai_categories", {})
@@ -620,7 +605,8 @@ def background_monitor():
                     triggered_categories = set()
                     triggered_instance_count = 0
 
-                    for d in dets:
+                    filtered_dets = []
+                    for d in enabled_dets:
                         x, y, ww, hh = d["box"]
                         conf = float(d["conf"])
                         cid = d["class"]
@@ -628,31 +614,38 @@ def background_monitor():
                         label = CLASS_NAMES[cid] if cid < len(CLASS_NAMES) else "FAIL"
                         key = label.lower()  # "Spaghetti" -> "spaghetti"
 
-                        # Category config; if missing, fall back to "old behavior":
-                        # enabled + trigger + same as global ai_threshold
-                        cat_cfg = categories.get(key, {
-                            "enabled": True,
-                            "trigger": True,
-                            "threshold": 0.5,
-                        })
+                        # Category config
+                        cat_cfg = categories.get(key)
+                        if not cat_cfg or not cat_cfg.get("enabled", True):
+                            continue
 
-                        # Per-category trigger threshold
-                        trig_thresh = float(cat_cfg.get("threshold", 0.5))
+                        detect_thresh = float(cat_cfg["detect_threshold"])
+                        trigger_thresh = float(cat_cfg["trigger_threshold"])
 
-                        # Decide color:
-                        # RED   = allowed to trigger & above trigger threshold
-                        # YELLOW = detected but below trigger threshold
-                        if cat_cfg.get("trigger", False) and conf >= trig_thresh:
-                            box_color = (0, 0, 255)      # red
+                        # Ignore below detection threshold
+                        if conf < detect_thresh:
+                            continue
+                            
+                        filtered_dets.append(d)
+                            
+                        # --- Per-category detection counts ---
+                        stats_block = state["stats"].get(cam_id)
+                        if stats_block is not None:
+                            per_cat = stats_block.get("per_category", {})
+                            if key in per_cat:
+                                per_cat[key]["detections"] = per_cat[key].get("detections", 0) + 1
+
+                        # Triggering detection
+                        if cat_cfg.get("trigger", False) and conf >= trigger_thresh:
+                            box_color = (0, 0, 255)
                             text_color = (255, 255, 255)
-
                             triggered_here = True
                             trigger_conf_here = max(trigger_conf_here, conf)
                             triggered_categories.add(key)
                             triggered_instance_count += 1
-                            
                         else:
-                            box_color = (0, 255, 255)    # yellow
+                            # Early warning detection
+                            box_color = (0, 255, 255)
                             text_color = (0, 0, 0)
 
                         # Draw detection
@@ -664,6 +657,12 @@ def background_monitor():
                         cv2.rectangle(debug, (x, ty-th-2), (x+tw, ty+2), box_color, -1)
                         cv2.putText(debug, text, (x, ty),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 1)
+                                    
+                    if len(filtered_dets) > 0:
+                        state["stats"][cam_id]["detections"] += len(filtered_dets)
+                        state["cameras"][cam_id]["score"] = max(float(d["conf"]) for d in filtered_dets)
+                    else:
+                        state["cameras"][cam_id]["score"] = 0.0
 
                     # For failure logic we track the best "triggerable" confidence
                     if triggered_here and trigger_conf_here > max_frame_score:

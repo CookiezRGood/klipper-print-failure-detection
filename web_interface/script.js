@@ -210,24 +210,26 @@ async function updateStatus() {
             retryText.innerText = `${data.failures}/${data.max_retries}`;
             confidenceBar.style.width = failPct + '%';
 
-            // Global detection threshold
-            const warnT = (currentSettings.warn_threshold || 0.3) * 100;
-
             // Find trigger thresholds for categories that can cancel the print
             const cats = currentSettings.ai_categories || {};
+            const detectThresholds = [];
             const triggerThresholds = [];
 
-            Object.keys(cats).forEach(k => {
-                const c = cats[k];
-                if (c.enabled && c.trigger) {
-                    triggerThresholds.push(c.threshold * 100);
+            Object.values(cats).forEach(c => {
+                if (!c || !c.enabled) return;
+
+                detectThresholds.push((c.detect_threshold ?? 0.3) * 100);
+
+                if (c.trigger) {
+                    triggerThresholds.push((c.trigger_threshold ?? 0.7) * 100);
                 }
             });
 
-            // Lowest trigger threshold becomes "failure threshold" for bar color
-            const failT = triggerThresholds.length > 0
-                ? Math.min(...triggerThresholds)
-                : 100;
+            // “Warning” point: the lowest detect threshold among enabled categories
+            const warnT = detectThresholds.length > 0 ? Math.min(...detectThresholds) : 100;
+
+            // “Failure” point: the lowest trigger threshold among enabled+trigger categories
+            const failT = triggerThresholds.length > 0 ? Math.min(...triggerThresholds) : 100;
 
             // Compute color
             let barColor;
@@ -470,10 +472,6 @@ async function loadSettings() {
         document.getElementById('check_interval').value =
             currentSettings.check_interval || 500;
 
-        // Thresholds
-        document.getElementById('warn_threshold').value =
-            Math.round((currentSettings.warn_threshold || 0.3) * 100);
-            
         // Load category settings
         const cats = currentSettings.ai_categories || {};
 
@@ -481,32 +479,44 @@ async function loadSettings() {
             cats.spaghetti?.enabled ?? true;
         document.getElementById("cat_spaghetti_trigger").checked =
             cats.spaghetti?.trigger ?? true;
-        document.getElementById("cat_spaghetti_threshold").value =
-            Math.round((cats.spaghetti?.threshold ?? 0.7) * 100);
+        document.getElementById("cat_spaghetti_detect_threshold").value =
+            Math.round((cats.spaghetti?.detect_threshold ?? 0.3) * 100);
+
+        document.getElementById("cat_spaghetti_trigger_threshold").value =
+            Math.round((cats.spaghetti?.trigger_threshold ?? 0.7) * 100);
 
         // Blob
         document.getElementById("cat_blob_enabled").checked =
             cats.blob?.enabled ?? true;
         document.getElementById("cat_blob_trigger").checked =
             cats.blob?.trigger ?? false;
-        document.getElementById("cat_blob_threshold").value =
-            Math.round((cats.blob?.threshold ?? 0.7) * 100);
+        document.getElementById("cat_blob_detect_threshold").value =
+            Math.round((cats.blob?.detect_threshold ?? 0.3) * 100);
+
+        document.getElementById("cat_blob_trigger_threshold").value =
+            Math.round((cats.blob?.trigger_threshold ?? 0.7) * 100);
 
         // Crack
         document.getElementById("cat_crack_enabled").checked =
             cats.crack?.enabled ?? true;
         document.getElementById("cat_crack_trigger").checked =
             cats.crack?.trigger ?? false;
-        document.getElementById("cat_crack_threshold").value =
-            Math.round((cats.crack?.threshold ?? 0.7) * 100);
+        document.getElementById("cat_crack_detect_threshold").value =
+            Math.round((cats.crack?.detect_threshold ?? 0.3) * 100);
+
+        document.getElementById("cat_crack_trigger_threshold").value =
+            Math.round((cats.crack?.trigger_threshold ?? 0.7) * 100);
 
         // Warping
         document.getElementById("cat_warping_enabled").checked =
             cats.warping?.enabled ?? true;
         document.getElementById("cat_warping_trigger").checked =
             cats.warping?.trigger ?? false;
-        document.getElementById("cat_warping_threshold").value =
-            Math.round((cats.warping?.threshold ?? 0.7) * 100);
+        document.getElementById("cat_warping_detect_threshold").value =
+            Math.round((cats.warping?.detect_threshold ?? 0.3) * 100);
+
+        document.getElementById("cat_warping_trigger_threshold").value =
+            Math.round((cats.warping?.trigger_threshold ?? 0.7) * 100);
 
         // Failures
         document.getElementById('consecutive_failures').value =
@@ -705,9 +715,6 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     currentSettings.check_interval =
         parseInt(document.getElementById('check_interval').value);
 
-    currentSettings.warn_threshold =
-        parseInt(document.getElementById('warn_threshold').value) / 100;
-
     currentSettings.consecutive_failures =
         parseInt(document.getElementById('consecutive_failures').value);
 
@@ -719,22 +726,26 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     spaghetti: {
         enabled: document.getElementById("cat_spaghetti_enabled").checked,
         trigger: document.getElementById("cat_spaghetti_trigger").checked,
-        threshold: document.getElementById("cat_spaghetti_threshold").value / 100
+        detect_threshold: document.getElementById("cat_spaghetti_detect_threshold").value / 100,
+        trigger_threshold: document.getElementById("cat_spaghetti_trigger_threshold").value / 100
     },
     blob: {
         enabled: document.getElementById("cat_blob_enabled").checked,
         trigger: document.getElementById("cat_blob_trigger").checked,
-        threshold: document.getElementById("cat_blob_threshold").value / 100
+        detect_threshold: document.getElementById("cat_blob_detect_threshold").value / 100,
+        trigger_threshold: document.getElementById("cat_blob_trigger_threshold").value / 100
     },
     crack: {
         enabled: document.getElementById("cat_crack_enabled").checked,
         trigger: document.getElementById("cat_crack_trigger").checked,
-        threshold: document.getElementById("cat_crack_threshold").value / 100
+        detect_threshold: document.getElementById("cat_crack_detect_threshold").value / 100,
+        trigger_threshold: document.getElementById("cat_crack_trigger_threshold").value / 100
     },
     warping: {
         enabled: document.getElementById("cat_warping_enabled").checked,
         trigger: document.getElementById("cat_warping_trigger").checked,
-        threshold: document.getElementById("cat_warping_threshold").value / 100
+        detect_threshold: document.getElementById("cat_warping_detect_threshold").value / 100,
+        trigger_threshold: document.getElementById("cat_warping_trigger_threshold").value / 100
     }
 };
 
@@ -785,22 +796,26 @@ document.getElementById("save-ai-cat-btn").addEventListener("click", async () =>
         spaghetti: {
             enabled: document.getElementById("cat_spaghetti_enabled").checked,
             trigger: document.getElementById("cat_spaghetti_trigger").checked,
-            threshold: document.getElementById("cat_spaghetti_threshold").value / 100
+            detect_threshold: document.getElementById("cat_spaghetti_detect_threshold").value / 100,
+            trigger_threshold: document.getElementById("cat_spaghetti_trigger_threshold").value / 100
         },
         blob: {
             enabled: document.getElementById("cat_blob_enabled").checked,
             trigger: document.getElementById("cat_blob_trigger").checked,
-            threshold: document.getElementById("cat_blob_threshold").value / 100
+            detect_threshold: document.getElementById("cat_blob_detect_threshold").value / 100,
+            trigger_threshold: document.getElementById("cat_blob_trigger_threshold").value / 100
         },
         crack: {
             enabled: document.getElementById("cat_crack_enabled").checked,
             trigger: document.getElementById("cat_crack_trigger").checked,
-            threshold: document.getElementById("cat_crack_threshold").value / 100
+            detect_threshold: document.getElementById("cat_crack_detect_threshold").value / 100,
+            trigger_threshold: document.getElementById("cat_crack_trigger_threshold").value / 100
         },
         warping: {
             enabled: document.getElementById("cat_warping_enabled").checked,
             trigger: document.getElementById("cat_warping_trigger").checked,
-            threshold: document.getElementById("cat_warping_threshold").value / 100
+            detect_threshold: document.getElementById("cat_warping_detect_threshold").value / 100,
+            trigger_threshold: document.getElementById("cat_warping_trigger_threshold").value / 100
         }
     };
 
