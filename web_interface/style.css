@@ -8,6 +8,7 @@
     --danger: #e53935;
     --success: #43a047;
     --warning: #fbc02d;
+    --cam-ratio: 4 / 3;
 }
 
 /* Global layout */
@@ -17,16 +18,23 @@ body {
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     background-color: #0d0d0d;
     color: var(--text-main);
-    overflow-y: hidden !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+html,
+body {
+    height: 100%;
 }
 
 .container {
-    max-width: 1280px;
+    max-width: min(1280px, 100%);
     margin: 0 auto;
-    padding: 10px 10px 10px 10px;
+    padding: clamp(8px, 2vw, 12px);
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .blurred {
@@ -63,19 +71,20 @@ header h2 {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
+    overflow: visible;
 }
 
 /* Camera grid */
 
 .camera-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 20px;
     min-height: 0;
     min-width: 0;
-    flex: 1;
+    flex: 0 0 auto;
 }
 
 /* Camera card */
@@ -159,16 +168,15 @@ header h2 {
     width: 100%;
     max-width: 100%;
     height: auto;
-    flex: 1;
+    flex: 0 0 auto;
 }
 
 /* Live feed image */
 
 .live-feed {
     width: 100%;
-    height: auto;
-    max-height: 100%;
-    object-fit: contain;
+    height: 100%;
+    object-fit: cover;
     user-select: none;
     -webkit-user-drag: none !important;
     pointer-events: none;
@@ -232,7 +240,7 @@ header h2 {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    cursor: pointer;
+    cursor: default;
     font-size: 0.85rem;
 }
 
@@ -242,11 +250,15 @@ header h2 {
 
 .toggle-switch .slider {
     width: 36px;
+    min-width: 36px;
+    max-width: 36px;
     height: 18px;
     background: #444;
     border-radius: 999px;
     position: relative;
     transition: background 0.2s ease;
+    cursor: pointer;
+    flex: 0 0 auto;
 }
 
 .toggle-switch .slider::before {
@@ -335,16 +347,43 @@ header h2 {
 .controls {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 14px;
+    width: 100%;
+}
+
+.controls-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.controls-right {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+/* DESKTOP: prevent bottom UI from collapsing on short windows */
+.health-section,
+.controls,
+#mask-help-center {
+    flex-shrink: 0;
 }
 
 .primary-btn,
 .secondary-btn {
     border-radius: 6px;
     border: none;
-    padding: 6px 12px;
+    height: 36px;
+    padding: 0 12px;
     font-size: 0.9rem;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
     transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
 }
 
@@ -402,6 +441,8 @@ header h2 {
     margin-top: -4px;
     margin-bottom: 6px;
     position: relative;
+    overflow: visible;
+    contain: layout;
 }
 
 .help-icon {
@@ -427,8 +468,8 @@ header h2 {
 
 .help-tooltip-text {
     position: absolute;
-    left: 0;
-    top: 22px;
+    left: 26px;
+    top: 50%;
     max-width: 260px;
     padding: 6px 8px;
     background: #1a1a1a;
@@ -443,7 +484,8 @@ header h2 {
     visibility: hidden;
     transform: translateY(-4px);
     transition: opacity 0.15s ease, transform 0.15s ease;
-    z-index: 10;
+    z-index: 999;
+    contain: paint;
 }
 
 .help-icon:hover + .help-tooltip-text,
@@ -465,6 +507,14 @@ dialog#settings-modal {
     width: 90%;
     background: #111;
     color: var(--text-main);
+    max-height: 90vh;
+    overflow: hidden;
+}
+
+#settings-page,
+#ai-page {
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .modal-header {
@@ -527,6 +577,11 @@ dialog#settings-modal {
     font-size: 0.85rem;
 }
 
+#settings-modal .setting-row .toggle-switch {
+    flex: 1;
+    justify-content: flex-start;
+}
+
 .modal-footer {
     padding: 8px 14px 10px 14px;
     border-top: 1px solid var(--border-subtle);
@@ -587,10 +642,11 @@ dialog#settings-modal {
 }
 
 #ai-page .modal-body {
-    flex: 1;
+    flex: 1 1 auto;
     overflow-y: auto;
     display: block;
     padding: 12px 14px;
+    min-height: 0;
 }
 
 /* 1 — Camera Setup: full width, top */
@@ -626,11 +682,13 @@ dialog#settings-modal {
     flex-direction: column;
     overflow-x: hidden;
     overflow: hidden;
+    pointer-events: none;
 }
 
 #settings-modal.show {
     transform: translateY(0);
     opacity: 1;
+    pointer-events: auto;
 }
 
 /* ============================
@@ -659,7 +717,7 @@ dialog#settings-modal {
     display: flex;
     flex-direction: column;
     height: 100%;
-    min-height: 100%;
+    min-height: 0;
 }
 
 #ai-page h4 {
@@ -676,6 +734,10 @@ dialog#settings-modal {
     display: flex;
     justify-content: flex-end;
     gap: 14px;
+    flex-shrink: 0;
+    position: static;
+    bottom: 0;
+    background: #111;
 }
 
 /* AI Categories Modal Layout */
@@ -759,77 +821,21 @@ dialog#settings-modal {
     margin: 0 auto 8px auto;
 }
 
-/* --- ADDED: FLOATING LOG PANEL --- */
+/* DESKTOP STABILITY: prevent phantom scroll + resize overlap */
+@media (min-width: 601px) {
+    body {
+        overflow-y: hidden;
+    }
 
-.log-floating-btn {
-    position: fixed;
-    bottom: 16px;
-    left: 16px;
-    background: #333;
-    color: #fff;
-    padding: 6px 12px;
-    border-radius: 6px;
-    border: none;
-    cursor: pointer;
-    font-size: 0.85rem;
-    opacity: 0.85;
-    z-index: 5000;
-    transition: background 0.15s ease, opacity 0.15s ease;
-}
+    .container {
+        height: 100vh;
+    }
 
-.log-floating-btn:hover {
-    background: #444;
-    opacity: 1;
-}
-
-.log-panel {
-    position: fixed;
-    bottom: 56px;
-    left: 16px;
-    width: 340px;
-    height: 260px;
-    background: #181818;
-    border: 1px solid #444;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.7);
-    display: flex;
-    flex-direction: column;
-    z-index: 5001;
-    overflow: hidden;
-}
-
-.log-panel-header {
-    background: #242424;
-    padding: 6px 10px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 0.85rem;
-    color: #eee;
-    border-bottom: 1px solid #444;
-}
-
-.log-close-btn {
-    border: none;
-    background: transparent;
-    color: #aaa;
-    cursor: pointer;
-    font-size: 1rem;
-}
-
-.log-close-btn:hover {
-    color: #fff;
-}
-
-.log-content {
-    flex: 1;
-    padding: 8px;
-    font-family: monospace;
-    font-size: 0.75rem;
-    color: #ddd;
-    background: #111;
-    overflow-y: auto;
-    white-space: pre-wrap;
+    .main-content {
+        overflow-y: auto;
+        max-height: none;
+        padding-bottom: 24px;
+    }
 }
 
 /* Responsive tweaks */
@@ -905,11 +911,20 @@ dialog#settings-modal {
     flex-direction: column;
 }
 
-/* Single mode: full width */
+/* SINGLE CAMERA MODE — DESKTOP FRIENDLY */
+.camera-grid.single-mode {
+    align-items: stretch;
+}
+
+.camera-grid.single-mode .camera-card {
+    height: auto;
+}
+
 .camera-grid.single-mode .camera-viewport {
     width: 100%;
-    height: 50vh;
-    max-height: 60vh;
+    aspect-ratio: var(--cam-ratio, 4 / 3);
+    min-height: 420px;
+    max-height: 75vh;
 }
 
 /* Dual mode: allow natural width so aspect ratios behave independently */
@@ -1102,4 +1117,193 @@ dialog#settings-modal {
 .stats-table-row span:nth-child(2),
 .stats-table-row span:nth-child(3) {
     text-align: center;
+}
+
+/* Logs modal */
+#logs-modal {
+    background: #1b1b1b;
+    color: var(--text-main);
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 0;
+    max-width: 720px;
+    width: 92%;
+    max-height: 85vh;
+    overflow: hidden;
+    transform: translateY(-20px);
+    opacity: 0;
+    transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+#logs-modal.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+#logs-modal::backdrop {
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+}
+
+.logs-body {
+    padding: 0;
+}
+
+#logs-modal .log-content {
+    height: 60vh;
+    max-height: calc(85vh - 52px);
+    padding: 10px 12px;
+    font-family: monospace;
+    font-size: 0.78rem;
+    color: #ddd;
+    background: #111;
+    overflow-y: auto;
+    white-space: pre-wrap;
+}
+
+.camera-card,
+.camera-viewport,
+.health-section {
+    min-height: 0;
+}
+
+/* MOBILE SETTINGS */
+@media (max-width: 600px) {
+    
+    body {
+        overflow-y: hidden;
+        overscroll-behavior-y: none;
+    }
+
+    .container {
+        height: 100svh;
+        overflow: hidden;
+    }
+    
+    @supports (height: 100dvh) {
+        .container {
+            height: 100dvh;
+        }
+    }
+
+    .main-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 24px;
+    }
+
+    .camera-viewport {
+        aspect-ratio: var(--cam-ratio, 4 / 3);
+        max-height: 70svh;
+    }
+    
+    .camera-grid.single-mode .camera-viewport {
+        min-height: 0;
+        max-height: none;
+    }
+    
+    .camera-card {
+        margin-bottom: 12px;
+    }
+
+    .health-section {
+        margin-top: 6px;
+    }
+    
+    .controls {
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .controls-left {
+        flex: 1 1 auto;
+    }
+
+    .controls-right {
+        flex: 0 0 auto;
+        margin-left: auto;
+    }
+
+    .health-header {
+        flex-direction: column;
+        gap: 4px;
+        text-align: center;
+    }
+    
+    #settings-page .modal-body {
+        grid-template-columns: 1fr;
+    }
+
+    #settings-page .modal-body .setting-group {
+        grid-column: auto !important;
+        grid-row: auto !important;
+    }
+    
+    dialog#settings-modal {
+        max-height: 90vh;
+        overflow: hidden;
+    }
+    
+    .setting-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .setting-row label {
+        flex: none;
+        width: 100%;
+    }
+    
+    dialog#settings-modal {
+        max-height: 90vh;
+        overflow: hidden;
+    }
+
+    #settings-pages {
+        height: auto;
+    }
+
+    #settings-page,
+    #ai-page {
+        height: auto;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    #ai-page .modal-footer {
+        position: static;
+    }
+    
+    .health-section,
+    .controls,
+    #mask-help-center {
+        flex-shrink: 0;
+    }
+    
+
+}
+
+/* Mobile LANDSCAPE: rotate-safe scrolling */
+@media (max-width: 600px) and (orientation: landscape) {
+
+    body {
+        overflow-y: auto !important;
+    }
+
+    .container {
+        height: auto !important;
+        min-height: 100dvh;
+        overflow: visible !important;
+    }
+
+    .main-content {
+        overflow: visible !important;
+    }
+
+    .camera-viewport {
+        max-height: 52vh;
+    }
 }

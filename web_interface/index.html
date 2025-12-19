@@ -98,15 +98,19 @@
 
             <!-- CONTROLS -->
             <div class="controls">
+                <div class="controls-left">
+                    <button id="mask-toggle-btn" class="secondary-btn">Visualize Mask</button>
 
-                <button id="mask-toggle-btn" class="secondary-btn">Visualize Mask</button>
+                    <button id="force-start-btn" class="primary-btn btn-success">
+                        ▶ Start Monitoring
+                    </button>
 
-                <button id="force-start-btn" class="primary-btn btn-success">
-                    ▶ Start Monitoring
-                </button>
+                    <button id="open-settings-btn" class="secondary-btn">⚙️ Settings</button>
+                </div>
 
-                <button id="open-settings-btn" class="secondary-btn">⚙️ Settings</button>
-
+                <div class="controls-right">
+                    <button id="open-logs-btn" class="secondary-btn">Logs ▾</button>
+                </div>
             </div>
 
         </div>
@@ -222,6 +226,24 @@
                                 <option value="pause">Pause Print</option>
                                 <option value="cancel">Cancel Print</option>
                             </select>
+                        </div>
+                        
+                        <div class="setting-row">
+                            <label>Send Mobileraker Notification:</label>
+
+                            <div class="toggle-switch toggle-only">
+                                <input type="checkbox" id="notify_mobileraker">
+                                <label class="slider" for="notify_mobileraker"></label>
+                            </div>
+                        </div>
+
+                        <div class="help-tooltip">
+                            <span class="help-icon">?</span>
+                            <div class="help-tooltip-text">
+                                Sends a Mobileraker push notification when a failure is triggered.
+                                <br>
+                                ⚠️ Requires Mobileraker and MR_NOTIFY macro to be installed/setup.
+                            </div>
                         </div>
                         
                     </div>
@@ -365,20 +387,17 @@
             </button>
         </div>
     </dialog>
-
-    <!-- Floating Log Button + Panel -->
-
-    <!-- Floating toggle button -->
-    <button id="log-toggle-btn" class="log-floating-btn">Logs ▾</button>
-
-    <!-- Log panel -->
-    <div id="log-panel" class="log-panel hidden">
-        <div class="log-panel-header">
-            <span>Plugin Log</span>
-            <button id="log-close-btn" class="log-close-btn">✕</button>
+    
+    <!-- Logs modal -->
+    <dialog id="logs-modal" class="modal logs-modal">
+        <div class="modal-header">
+            <h3>Plugin Log</h3>
+            <button id="close-logs-modal" class="icon-btn">&times;</button>
         </div>
-        <div id="log-content" class="log-content"></div>
-    </div>
+        <div class="modal-body logs-body">
+            <div id="log-content" class="log-content"></div>
+        </div>
+    </dialog>
 
     <!-- END BLOCK -->
 

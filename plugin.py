@@ -106,6 +106,7 @@ default_config = {
     "infer_every_n_loops": 1,
     "cam1_aspect_ratio": "4:3",
     "cam2_aspect_ratio": "4:3",
+    "notify_mobileraker": False,
 
     # Mask zones
     "masks": {"0": [], "1": []},
@@ -146,6 +147,8 @@ if os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE, "r") as f:
             loaded = json.load(f)
             config.update(loaded)
+            if "notify_mobileraker" not in config:
+                config["notify_mobileraker"] = False
             if "masks" not in config:
                 config["masks"] = default_config["masks"]
             if "ai_categories" not in config:
@@ -456,6 +459,21 @@ def trigger_printer_action(reason="Failure"):
             f"{url}/printer/gcode/script",
             json={"script": f"M118 >>> {reason.upper()}! Action: {action.upper()} <<<"}
         )
+        
+        # --- Mobileraker notification (optional) ---
+        if config.get("notify_mobileraker", False):
+            action_name = {
+                "nothing": "Warning",
+                "pause": "Pause Print",
+                "cancel": "Cancel Print"
+            }.get(action, action)
+
+            notify_msg = f"⚠️ AI Failure Detected – Action: {action_name}"
+
+            requests.post(
+                f"{url}/printer/gcode/script",
+                json={"script": f'MR_NOTIFY MESSAGE="{notify_msg}"'}
+            )
 
         if action == "pause":
             requests.post(f"{url}/printer/print/pause")

@@ -529,6 +529,10 @@ async function loadSettings() {
         // On failure
         document.getElementById('on_failure').value =
             currentSettings.on_failure || "pause";
+            
+        // Mobileraker notification
+        document.getElementById("notify_mobileraker").checked =
+            currentSettings.notify_mobileraker ?? false;
 
         // Masks
         const m = currentSettings.masks || {};
@@ -725,6 +729,9 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     currentSettings.on_failure =
         document.getElementById('on_failure').value;
         
+    currentSettings.notify_mobileraker =
+        document.getElementById("notify_mobileraker").checked;
+        
     currentSettings.infer_every_n_loops =
         parseInt(document.getElementById("infer_every_n_loops").value);
         
@@ -844,37 +851,48 @@ setupMaskDrawing(0, cam1View);
 setupMaskDrawing(1, cam2View);
 
 /********************************************************************
- * LOG PANEL
+ * LOGS MODAL
  ********************************************************************/
 let autoScrollLogs = true;
 
-const logPanel = document.getElementById("log-panel");
+const logsModal = document.getElementById("logs-modal");
 const logContent = document.getElementById("log-content");
-const logToggleBtn = document.getElementById("log-toggle-btn");
-const logCloseBtn = document.getElementById("log-close-btn");
+const openLogsBtn = document.getElementById("open-logs-btn");
+const closeLogsBtn = document.getElementById("close-logs-modal");
 
-logToggleBtn.addEventListener("click", () => {
-    logPanel.classList.toggle("hidden");
-});
+if (openLogsBtn && logsModal) {
+    openLogsBtn.addEventListener("click", () => {
+        logsModal.showModal();
+        logsModal.classList.add("show");
+        mainContent.classList.add("blurred");
+    });
+}
 
-logCloseBtn.addEventListener("click", () => {
-    logPanel.classList.add("hidden");
-});
+if (closeLogsBtn && logsModal) {
+    closeLogsBtn.addEventListener("click", () => {
+        logsModal.classList.remove("show");
+        logsModal.close();
+        mainContent.classList.remove("blurred");
+    });
+}
 
-logContent.addEventListener("scroll", () => {
-    const atBottom =
-        logContent.scrollHeight - logContent.scrollTop <= logContent.clientHeight + 5;
-
-    autoScrollLogs = atBottom;
-});
+if (logContent) {
+    logContent.addEventListener("scroll", () => {
+        const atBottom =
+            logContent.scrollHeight - logContent.scrollTop <= logContent.clientHeight + 5;
+        autoScrollLogs = atBottom;
+    });
+}
 
 function updateLogView(logText) {
+    if (!logContent) return;
     logContent.textContent = logText || "";
     if (autoScrollLogs) {
         logContent.scrollTop = logContent.scrollHeight;
     }
 }
 
+// Poll logs (always ok; you can restrict to logsModal.open if you want)
 setInterval(async () => {
     try {
         const res = await fetch("/api/logs");
@@ -883,6 +901,7 @@ setInterval(async () => {
         updateLogView(data.logs);
     } catch (err) {}
 }, 1500);
+
 
 /********************************************************************
  * Load settings at startup
