@@ -1,12 +1,14 @@
 # AI Training Documentation
 
-## Training Data Source:
+## Training Data Sources (combined and cleaned):
 
-https://universe.roboflow.com/hcmut-yxyhm/3d-printing-defects
+https://universe.roboflow.com/3d-printer-failure/all_anomalies-rfe61
 
-## Training Python Script:
+https://universe.roboflow.com/3d-printer-failure/fdm-w6znp-qnbzd
 
-train_script.py - 
+## Training Python Scripts:
+
+### train_phase1.py - 
 ```bash
 from ultralytics import YOLO
 
@@ -14,65 +16,108 @@ def main():
     model = YOLO("yolov8n.pt")
 
     model.train(
-        data="data.yaml",
-        epochs=150,
+        data="dataset_combined/data.yaml",
+        epochs=70,
         imgsz=640,
-        batch=24,
-        workers=8,
+        batch=16,
         device=0,
-
-        # small-object optimized
-        mosaic=0.5,
-        mixup=0.1,
-        hsv_h=0.02,
-        hsv_s=0.8,
-        hsv_v=0.5,
-        fliplr=0.5,
-        copy_paste=0.1,
-        translate=0.10,
-        scale=0.40,
-        shear=0.1,
-        perspective=0.0,
-        erasing=0.5,
-        auto_augment="randaugment",
-
-        close_mosaic=5,
-        multi_scale=False,        # disabled for speed
-
+        workers=4,
         optimizer="AdamW",
-        lr0=0.001,
+
+        # Learning rate
+        lr0=0.002,
         lrf=0.01,
-        momentum=0.9,
-        weight_decay=0.0005,
-        warmup_epochs=5,
-        patience=80,
+        warmup_epochs=3,
+        patience=15,
 
-        project="runs",
-        name="defects_nano_fast",
-        exist_ok=True
+        # Loss balance
+        cls=0.4,
+        box=7.5,
+        dfl=1.0,
+        label_smoothing=0.05,
+
+        # Augmentation (Phase 1)
+        mosaic=0.8,
+        mixup=0.05,
+        hsv_h=0.015,
+        hsv_s=0.5,
+        hsv_v=0.4,
+        degrees=6,
+        translate=0.08,
+        scale=0.45,
+        shear=1.5,
+        fliplr=0.5,
+
+        # Logging
+        project="runs/detect",
+        name="phase1_feature_learning",
+        exist_ok=True,
     )
-
-    print("\nTraining finished: runs/detect/defects_nano_fast/weights/best.pt")
-
 
 if __name__ == "__main__":
     main()
 ```
 
-## File Conversion Source:
+### train_phase2.py - 
+```bash
+from ultralytics import YOLO
 
-.pt to .tflite conversion - 
+def main():
+    model = YOLO("runs/detect/phase1_feature_learning/weights/best.pt")
 
-https://colab.research.google.com/drive/13YXnw2LqIHvQoQ9EvpWYOEkAi27ddriC?usp=sharing#scrollTo=LEE4ngaxBsJk
+    model.train(
+        data="dataset_combined/data.yaml",
+        epochs=110,
+        imgsz=640,
+        batch=16,
+        device=0,
+        workers=4,
+        optimizer="AdamW",
+
+        # Lower LR for fine tuning
+        lr0=0.0007,
+        lrf=0.05,
+        warmup_epochs=2,
+        patience=20,
+
+        # Strong class separation
+        cls=2.0,
+        box=7.5,
+        dfl=1.0,
+        label_smoothing=0.015,
+
+        # Reduced augmentation (Phase 2)
+        mosaic=0.15,
+        mixup=0.0,
+        hsv_h=0.01,
+        hsv_s=0.35,
+        hsv_v=0.3,
+        degrees=3,
+        translate=0.04,
+        scale=0.25,
+        shear=1.0,
+        fliplr=0.5,
+
+        # Logging
+        project="runs/detect",
+        name="phase2_class_separation",
+        exist_ok=True,
+    )
+
+if __name__ == "__main__":
+    main()
+
+```
 
 ## Results:
 
-<img width="2400" height="1200" alt="results" src="https://github.com/user-attachments/assets/03560fdd-8508-4a30-9c93-6596083c57d2" />
-
+![Training Results](images/results.png)
 
 **mAP@50 Values**:
 
-- All classes: 0.552
-- Spaghetti: 0.925
-- Stringing: 0.298
-- Zits: 0.431
+- All classes: 0.502
+<br><br>
+- Spaghetti: 0.556
+- Blob: 0.626
+- Warping: 0.341
+- Cracks: 0.485

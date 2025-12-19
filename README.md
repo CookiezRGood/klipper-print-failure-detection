@@ -13,28 +13,34 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 ## Prerequisites
 
+### Required:
 - Crowsnest (camera functionality)
    - https://github.com/mainsail-crew/crowsnest
+   
+### Optional:
 - Gcode Shell Commands (via kiauh; only needed for auto-start macro)
    - https://github.com/dw-0/kiauh/tree/master
+- Mobileraker (phone notifications for triggered failures)
+   - https://mobileraker.com/
+   - https://github.com/Clon1998/mobileraker_companion
 
 ## Features
 
-- **AI Failure Detection**: Uses a .tflite YOLO-based model to identify failures such as spaghetti, stringing, and zits.
+- **AI Failure Detection**: Uses a .tflite YOLO-based model to identify failures such as spaghetti, blobs, cracks, and warping.
 
-<img width="676" height="722" alt="image" src="https://github.com/user-attachments/assets/57d3da4e-2748-43e3-aa56-f9ea6d9aeaf1" />
+![AI Detection](documents/images/AI-detection.png)
 
 <br><br>
 
-- **Real-Time Web Dashboard**: View live camera feeds with bounding box overlays showing what the AI detects. The number of detections and failures for that session is also tracked below the respective camera.
+- **Real-Time Web Dashboard**: View live camera feeds with bounding box overlays showing what the AI detects. The number of detections and failures for that session is also tracked below the respective camera. (Works on desktop and mobile)
 
-<img width="1846" height="963" alt="image" src="https://github.com/user-attachments/assets/4eff5dcc-526b-4307-907e-c0163f2e1817" />
+![Dashboard](documents/images/dashboard.png)
 
 <br><br>
 
 - **Comprehensive Settings Menu**: Many configurable aspects to tailor the plugin to your printer and environment.
 
-<img width="710" height="919" alt="image" src="https://github.com/user-attachments/assets/a274d5f0-8cca-461b-8ce2-6c215ab8642f" />
+![Settings-Main](documents/images/settings-main.png)
 
 <br><br>
 
@@ -42,11 +48,17 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
   
 - **Dual Thresholds**:
    - **Detection Threshold** (yellow): highlights possible issues.
-   - **Trigger Threshold** (red): automatically pauses or cancels the print after a configurable number of retries.
+   - **Trigger Threshold** (red): automatically warns, pauses, or cancels the print after a configurable number of retries.
 
 - **Configurable Actions**: Choose to warn only, pause, or cancel the print when a failure is detected.
 
+- **Mobileraker Notifications**: If you have Mobileraker installed and custom notifications setup, you can enable automatic notifications for detected failures.
+
 - **AI Detection Categories**: Choose what types of print failures you want to detect and whether or not they can trigger a failure.
+
+![Settings-Category](documents/images/settings-category.png)
+
+<br><br>
   
 - **Multi-Zone Masking System**:
    - Click-and-drag to define any number of mask rectangles directly on the camera feed.
@@ -55,7 +67,7 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
    - Right-click to delete individual zones.
    - “Clear Masks” button for quick resets.
 
-![masking](https://github.com/user-attachments/assets/77823aed-5a6c-4377-a6ef-7170a15fb93b)
+![Masking](documents/images/masking.gif)
 
 <br><br>
 
@@ -63,7 +75,7 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 - **Manual Start Button**: Starts AI monitoring process (useful for testing and finding ideal detection percentages).
 
-- **Auto-Start Macro**: Provided macro can be inserted at the end of your `PRINT_START` to automatically enable the detection system (prevents high CPU usage during things like leveling and meshing).
+- **Auto-Start Macro**: The provided macro can be inserted at the end of your `PRINT_START` to automatically enable the detection system (prevents high CPU usage during things like leveling and meshing).
 
 - **Live Plugin Logs**: View the logs for the plugin on the main dashboard to check for functionality and see errors.
 
@@ -77,13 +89,27 @@ Clone this repository to your printer and install:
    sudo bash install.sh
    ```
 
+## Automatic Updates
+
+Add the following to your moonraker.conf to receive automatic updates:
+
+```bash
+[update_manager klipper-print-failure-detection]
+type: git_repo
+path: ~/klipper/klippy/extras/klipper-print-failure-detection
+origin: https://github.com/CookiezRGood/klipper-print-failure-detection.git
+install_script: install.sh
+primary_branch: main
+managed_services: klipper-print-failure-detection
+```
+
 ## Post Installation Steps
 
 - Open your browser and go to http://YOUR-IP:7126 to see the dashboard.
-- Open the settings and input your printer camera ip (used in crowsnest).
+- Open the settings and input your printer camera(s) ip (used in crowsnest).
 - Adjust any other settings to your preference with testing to make sure it works well for your setup.
    - The main testing you need to find is your ideal trigger threshold value. The detection threshold value can be anything as long as its lower than the detection threshold value.
-- Add the following macros to your printer to allow auto-starting of the plugin while printing:
+- Add the following macros to your printer if you want to allow auto-starting of the plugin while printing:
    - Place the `ENABLE_AI_MONITOR` and `DISABLE_AI_MONITOR` macros at the end of your `PRINT_START` and wherever you want in your `PRINT_END` macro.
 
 ```bash
@@ -106,17 +132,17 @@ command: curl -X POST http://127.0.0.1:7126/api/action/stop
 timeout: 5
 ```
 
-
-## Automatic Updates
-
-Add the following to your moonraker.conf to receive automatic updates:
+- If you have Mobileraker installed, make sure you have the following macro set up to allow custom notifications if you want those enabled:
 
 ```bash
-[update_manager klipper-print-failure-detection]
-type: git_repo
-path: ~/klipper/klippy/extras/klipper-print-failure-detection
-origin: https://github.com/CookiezRGood/klipper-print-failure-detection.git
-install_script: install.sh
-primary_branch: main
-managed_services: klipper-print-failure-detection
+[gcode_macro MR_NOTIFY]
+description: Allows you to send a custom notification via Mobileraker without using the M117 command
+gcode:
+    {% set msg = "MR_NOTIFY:" ~ (params.TITLE ~ "|" if 'TITLE' in params|upper else "") ~ params.MESSAGE %}
+
+    {% if 'MESSAGE' in params|upper %}
+        { action_respond_info(msg) }
+    {% else %}
+        { action_raise_error('Must provide MESSAGE parameter') }
+    {% endif %}
 ```
