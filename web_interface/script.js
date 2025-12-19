@@ -86,8 +86,15 @@ async function toggleCamera(camId, enabled) {
 
     toggle.checked = enabled;
 
-    if (enabled) card.classList.remove('disabled');
-    else card.classList.add('disabled');
+    if (enabled) {
+        card.classList.remove('disabled');
+        viewEl = camId === 0 ? cam1View : cam2View;
+        viewEl.classList.add("mask-draw-enabled");
+    } else {
+        card.classList.add('disabled');
+        viewEl = camId === 0 ? cam1View : cam2View;
+        viewEl.classList.remove("mask-draw-enabled");
+    }
 
     if (currentSettings.cameras) {
         currentSettings.cameras[camId].enabled = enabled;
@@ -304,6 +311,11 @@ function syncMasksToServer() {
     updateMaskIndicators();
 }
 
+function isCameraEnabled(camId) {
+    const card = camId === 0 ? cam1Card : cam2Card;
+    return card && !card.classList.contains('disabled');
+}
+
 /********************************************************************
  * Mask drawing
  ********************************************************************/
@@ -326,6 +338,9 @@ function setupMaskDrawing(camId, viewEl) {
 
     viewEl.addEventListener('mousedown', (ev) => {
         ev.preventDefault();
+
+        if (!isCameraEnabled(camId)) return;
+
         if (ev.button !== 0) return;
 
         const { x, y, w, h } = posInCam(ev);
@@ -394,6 +409,8 @@ function setupMaskDrawing(camId, viewEl) {
 
     viewEl.addEventListener('contextmenu', (ev) => {
         ev.preventDefault();
+
+        if (!isCameraEnabled(camId)) return;
 
         const { x, y, w, h } = posInCam(ev);
         const nx = x / w;
