@@ -63,6 +63,40 @@ header h2 {
     font-size: 0.8rem;
     background-color: #555;
     color: white;
+    position: relative;
+    transition: background-color 0.25s ease, transform 0.15s ease;
+}
+
+.status-badge.status-change {
+    transform: scale(1.05);
+}
+
+.status-tooltip {
+    position: absolute;
+    top: 120%;
+    right: 0;
+    background: #1a1a1a;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 0.75rem;
+    color: #ddd;
+    white-space: nowrap;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.55);
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 1000;
+}
+
+.status-badge:hover .status-tooltip {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.status-tooltip.hidden {
+    display: none;
 }
 
 /* Main layout */
@@ -171,6 +205,17 @@ header h2 {
     flex: 0 0 auto;
 }
 
+/* Failure flash */
+@keyframes failure-flash {
+    0%   { box-shadow: 0 0 0 rgba(255,0,0,0); }
+    30%  { box-shadow: 0 0 16px rgba(255,0,0,0.9); }
+    100% { box-shadow: 0 0 0 rgba(255,0,0,0); }
+}
+
+.camera-viewport.failure-flash {
+    animation: failure-flash 0.35s ease-out;
+}
+
 /* Live feed image */
 
 .live-feed {
@@ -203,16 +248,26 @@ header h2 {
     border-radius: 4px;
 }
 
+.camera-card .disabled-overlay {
+    transition: opacity 0.35s ease;
+}
+
 .camera-card.disabled .disabled-overlay {
+    opacity: 1;
+}
+
+.camera-card .disabled-overlay span {
     opacity: 1;
 }
 
 .camera-card.disabled .live-feed {
     display: none !important;
+    opacity: 0;
 }
 
-.camera-card.disabled .camera-viewport {
-    background: #0f0f0f !important; 
+.camera-card .camera-viewport,
+.camera-card .live-feed {
+    transition: opacity 0.25s ease, filter 0.25s ease;
 }
 
 
@@ -295,12 +350,35 @@ header h2 {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    position: relative;
+    margin-bottom: 8px;
+}
+
+.health-section.glow-green {
+    border-color: rgba(76, 175, 80, 0.9);
+    box-shadow: inset 0 0 0 1px rgba(76, 175, 80, 0.35);
+}
+
+.health-section.glow-yellow {
+    border-color: rgba(255, 235, 59, 0.9);
+    box-shadow: inset 0 0 0 1px rgba(255, 235, 59, 0.45);
+}
+
+.health-section.glow-red {
+    border-color: rgba(244, 67, 54, 1);
+    box-shadow: inset 0 0 0 1px rgba(244, 67, 54, 0.6);
 }
 
 .health-header {
     display: flex;
     justify-content: space-between;
     font-size: 0.9rem;
+}
+
+.confidence-trend {
+    margin-left: 4px;
+    font-size: 0.8rem;
+    opacity: 0.7;
 }
 
 /* Progress bar */
@@ -1002,6 +1080,28 @@ dialog#settings-modal {
 .camera-viewport.has-masks:hover::before {
     opacity: 1;
     transform: translateY(0);
+}
+
+/* Toast notification */
+.toast {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: #222;
+    color: #fff;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    z-index: 5000;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
 }
 
 /* Per-category stats modal */

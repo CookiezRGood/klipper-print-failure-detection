@@ -4,6 +4,8 @@ let imageInterval;
 let currentSettings = {};
 let isMaskVisible = false;
 let suppressConfidenceUpdates = false;
+let lastConfidence = null;
+let lastStatus = null;
 
 const statusBadge = document.getElementById('status-indicator');
 const ssimText = document.getElementById('ssim-val');
@@ -167,16 +169,63 @@ async function updateStatus() {
         refreshStatsModalIfOpen();
 
         const statusTxt = data.status.toUpperCase().replace('_', ' ');
-        statusBadge.innerText = statusTxt;
+        
+        if (lastStatus !== data.status) {
+            statusBadge.classList.add("status-change");
+            setTimeout(() => statusBadge.classList.remove("status-change"), 150);
+            lastStatus = data.status;
+        }
+        
+        const statusTextEl = document.getElementById("status-text");
+        if (statusTextEl) {
+            statusTextEl.innerText = statusTxt;
+        } else {
+            statusBadge.innerText = statusTxt;
+        }
 
         if (data.status === 'failure_detected') {
+            suppressConfidenceUpdates = true;
             statusBadge.style.backgroundColor = '#e53935';
             setButtonState('stop');
+            
+            const tooltip = document.getElementById("status-tooltip");
+            const statusText = document.getElementById("status-text");
+
+            if (statusText) statusText.innerText = "FAILURE DETECTED";
+
+            if (data.failure_reason) {
+                const camLabel =
+                    data.failure_cam === 0 ? "Primary Camera" :
+                    data.failure_cam === 1 ? "Secondary Camera" : "Unknown Camera";
+
+                if (tooltip) tooltip.innerHTML =
+                    `<strong>Triggered by:</strong> ${data.failure_reason.category} (${Math.round(data.failure_reason.confidence * 100)}%)<br>` +
+                    `<strong>Camera:</strong> ${camLabel}`;
+
+                if (tooltip) tooltip.classList.remove("hidden");
+            }
+
+            const failCam = data.failure_cam;
+
+            if (failCam === 0 && cam1View) {
+                cam1View.classList.add("failure-flash");
+                setTimeout(() => cam1View.classList.remove("failure-flash"), 400);
+            }
+
+            if (failCam === 1 && cam2View) {
+                cam2View.classList.add("failure-flash");
+                setTimeout(() => cam2View.classList.remove("failure-flash"), 400);
+            }
+            
         } else if (data.status === 'monitoring') {
             statusBadge.style.backgroundColor = '#43a047';
+            document.getElementById("status-text").innerText = statusTxt;
+            document.getElementById("status-tooltip").classList.add("hidden");
             setButtonState('stop');
         } else {
             statusBadge.style.backgroundColor = '#555';
+            document.getElementById("status-text").innerText = statusTxt;
+            document.getElementById("status-tooltip").classList.add("hidden");
             setButtonState('start');
         }
 
@@ -185,6 +234,11 @@ async function updateStatus() {
 
         if (data.status !== 'monitoring' && data.status !== 'failure_detected') {
             health.classList.add('dimmed');
+            health.classList.remove("glow-green", "glow-yellow", "glow-red");
+            
+            const trendEl = document.getElementById("confidence-trend");
+            if (trendEl) trendEl.innerText = "→";
+            lastConfidence = null;
 
             confidenceBar.style.opacity = "0";
 
@@ -212,10 +266,23 @@ async function updateStatus() {
         }
 
         if (!suppressConfidenceUpdates) {
-            const failPct = Math.round(data.score * 100);
+            const failPct = Math.floor(data.score * 100);
             ssimText.innerText = failPct + '%';
             retryText.innerText = `${data.failures}/${data.max_retries}`;
             confidenceBar.style.width = failPct + '%';
+            
+            // --- Confidence trend arrow ---
+            const trendEl = document.getElementById("confidence-trend");
+            if (trendEl && lastConfidence !== null) {
+                if (failPct > lastConfidence + 2) {
+                    trendEl.innerText = "↑";
+                } else if (failPct < lastConfidence - 2) {
+                    trendEl.innerText = "↓";
+                } else {
+                    trendEl.innerText = "→";
+                }
+            }
+            lastConfidence = failPct;
 
             // Find trigger thresholds for categories that can cancel the print
             const cats = currentSettings.ai_categories || {};
@@ -254,6 +321,20 @@ async function updateStatus() {
             }
 
             confidenceBar.style.backgroundColor = barColor;
+
+            const health = document.querySelector('.health-section');
+
+            // Clear glow states
+            health.classList.remove("glow-green", "glow-yellow", "glow-red");
+
+            // Apply glow based on state
+            if (barColor === '#F44336') {
+                health.classList.add("glow-red");
+            } else if (barColor === '#FFEB3B' || barColor === '#FFB74D') {
+                health.classList.add("glow-yellow");
+            } else {
+                health.classList.add("glow-green");
+            }
 
         }
 
@@ -405,6 +486,7 @@ function setupMaskDrawing(camId, viewEl) {
         });
 
         syncMasksToServer();
+        showToast("Mask added");
     });
 
     viewEl.addEventListener('contextmenu', (ev) => {
@@ -428,6 +510,7 @@ function setupMaskDrawing(camId, viewEl) {
             ) {
                 zones.splice(i, 1);
                 syncMasksToServer();
+                showToast("Mask removed");
                 return;
             }
         }
@@ -457,6 +540,27 @@ function updateMaskIndicators() {
             view.classList.remove("pulse-mask");
         }
     });
+}
+
+/********************************************************************
+ * Mask Toast
+ ********************************************************************/
+
+function showToast(msg) {
+    let toast = document.getElementById("ui-toast");
+    if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "ui-toast";
+        toast.className = "toast";
+        document.body.appendChild(toast);
+    }
+
+    toast.textContent = msg;
+    toast.classList.add("show");
+
+    setTimeout(() => {
+        toast.classList.remove("show");
+    }, 900);
 }
 
 /********************************************************************
@@ -923,4 +1027,6 @@ setInterval(async () => {
 /********************************************************************
  * Load settings at startup
  ********************************************************************/
+setButtonState('start');
 loadSettings();
+updateStatus();

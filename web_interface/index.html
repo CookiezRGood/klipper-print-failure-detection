@@ -11,7 +11,10 @@
     <div class="container">
         <header>
             <h2>Failure Detection Dashboard</h2>
-            <div id="status-indicator" class="status-badge">WAITING</div>
+            <div id="status-indicator" class="status-badge">
+                <span id="status-text">WAITING</span>
+                <div id="status-tooltip" class="status-tooltip hidden"></div>
+            </div>
         </header>
 
         <div class="main-content" id="main-content">
@@ -87,7 +90,11 @@
             <!-- HEALTH BAR -->
             <div class="health-section">
                 <div class="health-header">
-                    <span>Failure Probability: <span id="ssim-val">--%</span></span>
+                    <span>
+                        Failure Probability:
+                        <span id="ssim-val">--%</span>
+                        <span id="confidence-trend" class="confidence-trend">→</span>
+                    </span>
                     <span>Retries: <span id="retry-val">0/0</span></span>
                 </div>
                 <div class="progress-track">

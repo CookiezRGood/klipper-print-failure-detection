@@ -170,6 +170,8 @@ def save_config_to_file():
 state = {
     "status": "idle",
     "failure_count": 0,
+    "failure_cam": None,
+    "failure_reason": None,
     "action_triggered": False,
     "monitoring_active": False,
     "manual_override": False,
@@ -389,6 +391,8 @@ def action_start():
     state["monitoring_active"] = True
     state["failure_count"] = 0
     state["action_triggered"] = False
+    state["failure_cam"] = None
+    state["failure_reason"] = None
     state["manual_override"] = True
     logging.info("Monitoring STARTED (manual)")
     return jsonify({"success": True})
@@ -396,6 +400,8 @@ def action_start():
 @app.route("/api/action/stop", methods=["POST", "GET"])
 def action_stop():
     state["monitoring_active"] = False
+    state["failure_cam"] = None
+    state["failure_reason"] = None
     logging.info("Monitoring STOPPED")
     return jsonify({"success": True})
 
@@ -408,6 +414,8 @@ def action_start_from_macro():
     state["monitoring_active"] = True
     state["failure_count"] = 0
     state["action_triggered"] = False
+    state["failure_cam"] = None
+    state["failure_reason"] = None
     state["manual_override"] = False
     logging.info("Monitoring STARTED (print start macro)")
     return jsonify({"success": True})
@@ -530,6 +538,8 @@ def background_monitor():
 
             masks_cfg = config.get("masks", {})
             max_frame_score = 0.0
+            raw_max_score = 0.0
+            failure_cam = None
 
             cam_limit = int(config.get("camera_count", 2))
 
@@ -705,13 +715,16 @@ def background_monitor():
                     if len(filtered_dets) > 0:
                         if do_infer:
                             state["stats"][cam_id]["detections"] += len(filtered_dets)
-                        state["cameras"][cam_id]["score"] = max(float(d["conf"]) for d in filtered_dets)
+                        cam_score = max(float(d["conf"]) for d in filtered_dets)
+                        state["cameras"][cam_id]["score"] = cam_score
+                        raw_max_score = max(raw_max_score, cam_score)
                     else:
                         state["cameras"][cam_id]["score"] = 0.0
 
                     # For failure logic we track the best "triggerable" confidence
                     if triggered_here and trigger_conf_here > max_frame_score:
                         max_frame_score = trigger_conf_here
+                        failure_cam = cam_id
 
                     if triggered_here and do_infer:
                         state["stats"][cam_id]["failures"] += triggered_instance_count
@@ -743,10 +756,16 @@ def background_monitor():
                 time.sleep(1)
                 continue
 
+            # If failure already triggered, freeze state
+            if state["action_triggered"]:
+                state["status"] = "failure_detected"
+                time.sleep(0.5)
+                continue
+
             state["status"] = "monitoring"
             retries = int(config["consecutive_failures"])
 
-            if max_frame_score > 0.0:
+            if do_infer and max_frame_score > 0.0:
                 if state["failure_count"] < retries:
                     state["failure_count"] += 1
 
@@ -757,8 +776,19 @@ def background_monitor():
 
                 if state["failure_count"] >= retries:
                     state["status"] = "failure_detected"
+                    state["failure_cam"] = failure_cam
+                    state["failure_reason"] = {
+                        "category": key,
+                        "confidence": trigger_conf_here
+                    }
+                    
+                    logging.info(
+                        f"[FAILURE] {key.capitalize()} @ {int(trigger_conf_here * 100)}% | Cam {failure_cam}"
+                    )
+                    
                     trigger_printer_action("AI detection")
-            else:
+
+            elif do_infer and max_frame_score == 0.0:
                 if state["failure_count"] > 0:
                     state["failure_count"] -= 1
 
@@ -830,7 +860,9 @@ def get_status():
         "score": max_score,
         "failures": state["failure_count"],
         "max_retries": config["consecutive_failures"],
-        "cam_stats": state["stats"]
+        "cam_stats": state["stats"],
+        "failure_cam": state.get("failure_cam"),
+        "failure_reason": state.get("failure_reason")
     })
 
 # ================================================================
