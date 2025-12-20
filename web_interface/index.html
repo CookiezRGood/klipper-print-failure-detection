@@ -129,7 +129,11 @@
     <dialog id="settings-modal">
         <div class="modal-header">
             <h3>Configuration</h3>
-            <button id="close-modal-x" class="icon-btn">×</button>
+
+            <div class="modal-header-right">
+                <div id="settings-unsaved-warning" class="save-status error"></div>
+                <button id="close-modal-x" class="icon-btn">×</button>
+            </div>
         </div>
 
         <div id="settings-pages">
@@ -349,8 +353,11 @@
                         <div class="save-status" id="category-save-status" aria-live="polite"></div>
                     </div>
 
-                    <button id="back-ai-btn" class="secondary-btn">Back</button>
-                    <button id="save-ai-cat-btn" class="primary-btn">Save Category Settings</button>
+                    <div class="ai-footer-right">
+                        <div id="ai-unsaved-warning" class="save-status error"></div>
+                        <button id="back-ai-btn" class="secondary-btn">Back</button>
+                        <button id="save-ai-cat-btn" class="primary-btn">Save Category Settings</button>
+                    </div>
                 </div>
             </div>
 

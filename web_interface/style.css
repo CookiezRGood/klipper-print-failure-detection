@@ -489,6 +489,13 @@ header h2 {
     opacity: 0.9;
 }
 
+.primary-btn:active,
+.secondary-btn:active,
+.icon-btn:active {
+    filter: brightness(0.85);
+    transform: translateY(1px);
+}
+
 button:disabled {
     opacity: 0.45;
     cursor: not-allowed;
@@ -612,6 +619,12 @@ dialog#settings-modal {
 .modal-header h3 {
     margin: 0;
     font-size: 1.1rem;
+}
+
+.modal-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 .icon-btn {
@@ -917,6 +930,12 @@ dialog#settings-modal {
     .ai-cat-body {
         grid-template-columns: 1fr;
     }
+}
+
+.ai-footer-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 /* Hidden class */
@@ -1290,7 +1309,7 @@ dialog#settings-modal {
 }
 
 .history-scroll {
-    height: 260px;
+    height: 600px;
     overflow-y: auto;
 
     scrollbar-gutter: stable;

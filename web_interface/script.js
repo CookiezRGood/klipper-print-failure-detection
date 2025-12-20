@@ -8,6 +8,10 @@ let lastConfidence = null;
 let lastStatus = null;
 let failureHistory = [];
 let renderedHistoryKeys = new Set();
+let settingsDirty = false;
+let settingsCloseArmed = false;
+let aiDirty = false;
+let aiBackArmed = false;
 
 const statusBadge = document.getElementById('status-indicator');
 const ssimText = document.getElementById('ssim-val');
@@ -720,7 +724,28 @@ document.getElementById('open-settings-btn').addEventListener('click', () => {
         statusEl.className = "save-status";
     }
 
+    const warnEl = document.getElementById("settings-unsaved-warning");
+    if (warnEl) warnEl.textContent = "";
+
+    settingsDirty = false;
+    settingsCloseArmed = false;
+
     loadSettings();
+
+    // Mark dirty when ANY input/select changes
+    settingsModal.querySelectorAll("input, select").forEach(el => {
+        el.addEventListener("change", () => {
+            settingsDirty = true;
+            settingsCloseArmed = false;
+            if (warnEl) warnEl.textContent = "";
+        });
+        el.addEventListener("input", () => {
+            settingsDirty = true;
+            settingsCloseArmed = false;
+            if (warnEl) warnEl.textContent = "";
+        });
+    });
+
     settingsModal.showModal();
     settingsModal.classList.add('show');
     overlay.classList.add('active');
@@ -744,18 +769,100 @@ openAiBtn.addEventListener("click", () => {
     }
     if (aiErr) aiErr.textContent = "";
 
+    aiDirty = false;
+    aiBackArmed = false;
+
+    const aiWarn = document.getElementById("ai-unsaved-warning");
+    if (aiWarn) aiWarn.textContent = "";
+
+    const aiPage = document.getElementById("ai-page");
+    if (aiPage) {
+        aiPage.querySelectorAll("input, select").forEach(el => {
+            el.addEventListener("change", () => {
+                aiDirty = true;
+                aiBackArmed = false;
+                if (aiWarn) aiWarn.textContent = "";
+            });
+            el.addEventListener("input", () => {
+                aiDirty = true;
+                aiBackArmed = false;
+                if (aiWarn) aiWarn.textContent = "";
+            });
+        });
+    }
+
     settingsPages.classList.add("show-ai");
 });
 
 // Go back to main settings page
 backAiBtn.addEventListener("click", () => {
+    const warn = document.getElementById("ai-unsaved-warning");
+
+    if (aiDirty && !aiBackArmed) {
+        if (warn) {
+            warn.textContent = "You have unsaved changes. Press Back again to discard.";
+        }
+        aiBackArmed = true;
+        return;
+    }
+
+    aiDirty = false;
+    aiBackArmed = false;
+    if (warn) warn.textContent = "";
+    
+    loadSettings();
+
     settingsPages.classList.remove("show-ai");
 });
 
 document.getElementById('close-modal-x').addEventListener('click', () => {
+    const warnEl = document.getElementById("settings-unsaved-warning");
+
+    if (settingsDirty && !settingsCloseArmed) {
+        if (warnEl) {
+            warnEl.textContent = "You have unsaved changes. Click × again to discard.";
+        }
+        settingsCloseArmed = true;
+        return;
+    }
+
+    settingsDirty = false;
+    settingsCloseArmed = false;
+
+    if (warnEl) warnEl.textContent = "";
+    
+    aiDirty = false;
+    aiBackArmed = false;
+
+    const aiWarn = document.getElementById("ai-unsaved-warning");
+    if (aiWarn) aiWarn.textContent = "";
+
     settingsModal.classList.remove('show');
     settingsPages.classList.remove("show-ai");
     settingsModal.close();
+    overlay.classList.remove('active');
+    mainContent.classList.remove('blurred');
+});
+
+// Prevent ESC from breaking UI; route through close logic
+settingsModal.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    document.getElementById("close-modal-x").click();
+});
+
+settingsModal.addEventListener("close", () => {
+    settingsDirty = false;
+    settingsCloseArmed = false;
+
+    const warnEl = document.getElementById("settings-unsaved-warning");
+    if (warnEl) warnEl.textContent = "";
+
+    aiDirty = false;
+    aiBackArmed = false;
+
+    const aiWarn = document.getElementById("ai-unsaved-warning");
+    if (aiWarn) aiWarn.textContent = "";
+    
     overlay.classList.remove('active');
     mainContent.classList.remove('blurred');
 });
@@ -836,6 +943,12 @@ if (statsModalClose) {
     mainContent.classList.remove("blurred");
 });
 }
+
+statsModal.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    statsModal.close();
+    mainContent.classList.remove("blurred");
+});
 
 const resetStatsBtn = document.getElementById("reset-stats-btn");
 
@@ -977,6 +1090,12 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         statusEl.textContent = "Saved ✓";
         statusEl.className = "save-status success";
     }
+    
+    settingsDirty = false;
+    settingsCloseArmed = false;
+
+    const warnEl = document.getElementById("settings-unsaved-warning");
+    if (warnEl) warnEl.textContent = "";
 
     setTimeout(() => {
         settingsModal.classList.remove('show');
@@ -1082,6 +1201,13 @@ document.getElementById("save-ai-cat-btn").addEventListener("click", async () =>
         statusEl.textContent = "Saved ✓";
         statusEl.className = "save-status success";
     }
+    
+    aiDirty = false;
+    aiBackArmed = false;
+
+    const aiWarn = document.getElementById("ai-unsaved-warning");
+    if (aiWarn) aiWarn.textContent = "";
+    
     setTimeout(() => {
         settingsPages.classList.remove("show-ai");
     }, 700);
@@ -1114,6 +1240,12 @@ if (closeHistoryBtn && historyModal) {
         mainContent.classList.remove("blurred");
     });
 }
+
+historyModal.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    historyModal.close();
+    mainContent.classList.remove("blurred");
+});
 
 async function fetchFailureHistory() {
     try {
@@ -1236,6 +1368,12 @@ if (closeLogsBtn && logsModal) {
         mainContent.classList.remove("blurred");
     });
 }
+
+logsModal.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    logsModal.close();
+    mainContent.classList.remove("blurred");
+});
 
 const downloadLogsBtn = document.getElementById("download-logs-btn");
 
