@@ -489,6 +489,11 @@ header h2 {
     opacity: 0.9;
 }
 
+button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 /* Help text */
 
 .help-text {
@@ -661,11 +666,45 @@ dialog#settings-modal {
     justify-content: flex-start;
 }
 
+.collapsible {
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.2s ease;
+    max-height: 500px;
+    opacity: 1;
+}
+
+.collapsible.hidden {
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
 .modal-footer {
     padding: 8px 14px 10px 14px;
     border-top: 1px solid var(--border-subtle);
     display: flex;
     justify-content: flex-end;
+}
+
+.save-status {
+    font-size: 0.85em;
+    margin-right: 10px;
+    align-self: center;
+    white-space: nowrap;
+}
+
+.save-status.success {
+    color: #6bff95;
+}
+
+.save-status.error {
+    color: #ff6b6b;
+}
+
+.category-error-text {
+    color: #ff6b6b;
+    font-size: 0.85em;
+    margin-bottom: 4px;
 }
 
 #settings-overlay {

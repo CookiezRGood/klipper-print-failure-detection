@@ -77,7 +77,7 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 - **Auto-Start Macro**: The provided macro can be inserted at the end of your `PRINT_START` to automatically enable the detection system (prevents high CPU usage during things like leveling and meshing).
 
-- **Live Plugin Logs**: View the logs for the plugin on the main dashboard to check for functionality and see errors.
+- **Live Plugin Logs**: View the logs for the plugin on the main dashboard to check for functionality and see errors. Download log from the dashboard.
 
 - **Detection History Table**: Keep track of detections and failures that happen during the current print (30 max). Tracks when it occurs, which camera, the type of failure, and the % confidence level.
 

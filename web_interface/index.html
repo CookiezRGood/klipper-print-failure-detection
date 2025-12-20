@@ -163,17 +163,19 @@
                             </select>
                         </div>
 
-                        <div class="setting-row" id="cam2-settings-row">
-                            <label>Cam 2 URL:</label>
-                            <input type="text" id="cam2_url_input">
-                        </div>
+                        <div id="cam2-settings" class="collapsible">
+                            <div class="setting-row" id="cam2-settings-row">
+                                <label>Cam 2 URL:</label>
+                                <input type="text" id="cam2_url_input">
+                            </div>
 
-                        <div class="setting-row" id="cam2-aspect-row">
-                            <label>Cam 2 Aspect Ratio:</label>
-                            <select id="cam2_aspect_ratio">
-                                <option value="16:9">16:9</option>
-                                <option value="4:3">4:3</option>
-                            </select>
+                            <div class="setting-row" id="cam2-aspect-row">
+                                <label>Cam 2 Aspect Ratio:</label>
+                                <select id="cam2_aspect_ratio">
+                                    <option value="16:9">16:9</option>
+                                    <option value="4:3">4:3</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div class="setting-row">
@@ -267,6 +269,7 @@
                 </div>
 
                 <div class="modal-footer">
+                    <div id="settings-save-status" class="save-status" aria-live="polite"></div>
                     <button id="save-settings-btn" class="primary-btn">Save Configuration</button>
                 </div>
             </div>
@@ -341,6 +344,11 @@
                 </div>
 
                 <div class="modal-footer">
+                    <div>
+                        <div class="category-error-text" id="category-error-text"></div>
+                        <div class="save-status" id="category-save-status" aria-live="polite"></div>
+                    </div>
+
                     <button id="back-ai-btn" class="secondary-btn">Back</button>
                     <button id="save-ai-cat-btn" class="primary-btn">Save Category Settings</button>
                 </div>
@@ -431,6 +439,9 @@
         </div>
         <div class="modal-body logs-body">
             <div id="log-content" class="log-content"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="download-logs-btn" class="primary-btn">Download</button>
         </div>
     </dialog>
 

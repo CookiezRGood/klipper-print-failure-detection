@@ -381,6 +381,15 @@ function applyLayout(count) {
         cameraGrid.classList.remove('single-mode');
         cam2Card.classList.remove('hidden');
     }
+    updateCam2SettingsVisibility(count);
+}
+
+function updateCam2SettingsVisibility(count) {
+    const wrap = document.getElementById("cam2-settings");
+    if (!wrap) return;
+
+    if (parseInt(count) === 1) wrap.classList.add("hidden");
+    else wrap.classList.remove("hidden");
 }
 
 /********************************************************************
@@ -593,6 +602,15 @@ async function loadSettings() {
         // Camera count
         document.getElementById('camera_count').value =
             currentSettings.camera_count || 2;
+            
+        updateCam2SettingsVisibility(currentSettings.camera_count || 2);
+        
+        const camCountEl = document.getElementById("camera_count");
+        if (camCountEl) {
+            camCountEl.addEventListener("change", () => {
+                updateCam2SettingsVisibility(parseInt(camCountEl.value));
+            });
+        }
 
         // URLs
         document.getElementById('cam1_url_input').value = cam1.url || "";
@@ -696,6 +714,12 @@ async function loadSettings() {
  * Open / Close Settings panel (blur + overlay)
  ********************************************************************/
 document.getElementById('open-settings-btn').addEventListener('click', () => {
+    const statusEl = document.getElementById("settings-save-status");
+    if (statusEl) {
+        statusEl.textContent = "";
+        statusEl.className = "save-status";
+    }
+
     loadSettings();
     settingsModal.showModal();
     settingsModal.classList.add('show');
@@ -712,6 +736,14 @@ const backAiBtn = document.getElementById("back-ai-btn");
 
 // Open AI Category Page
 openAiBtn.addEventListener("click", () => {
+    const aiStatus = document.getElementById("category-save-status");
+    const aiErr = document.getElementById("category-error-text");
+    if (aiStatus) {
+        aiStatus.textContent = "";
+        aiStatus.className = "save-status";
+    }
+    if (aiErr) aiErr.textContent = "";
+
     settingsPages.classList.add("show-ai");
 });
 
@@ -940,17 +972,79 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     applyLayout(currentSettings.camera_count);
     startImageLoop(currentSettings.check_interval);
 
-    alert("Configuration Saved!");
+    const statusEl = document.getElementById("settings-save-status");
+    if (statusEl) {
+        statusEl.textContent = "Saved ✓";
+        statusEl.className = "save-status success";
+    }
 
-    settingsModal.classList.remove('show');
-    settingsModal.close();
-    overlay.classList.remove('active');
-    mainContent.classList.remove('blurred');  // FIXED
+    setTimeout(() => {
+        settingsModal.classList.remove('show');
+        settingsModal.close();
+        overlay.classList.remove('active');
+        mainContent.classList.remove('blurred');
+    }, 700);
 });
 
 // Save AI Category Settings
 document.getElementById("save-ai-cat-btn").addEventListener("click", async () => {
+    
+    const saveBtn = document.getElementById("save-ai-cat-btn");
+    const errEl = document.getElementById("category-error-text");
+    const statusEl = document.getElementById("category-save-status");
 
+    if (errEl) errEl.textContent = "";
+    if (statusEl) {
+        statusEl.textContent = "";
+        statusEl.className = "save-status";
+    }
+    if (saveBtn) saveBtn.disabled = false;
+
+    // Validation: detect must be STRICTLY less than trigger (failure)
+    const pairs = [
+        ["Spaghetti", "cat_spaghetti_detect_threshold", "cat_spaghetti_trigger_threshold"],
+        ["Blob", "cat_blob_detect_threshold", "cat_blob_trigger_threshold"],
+        ["Bed Adhesion Failure", "cat_bed_adhesion_failure_detect_threshold", "cat_bed_adhesion_failure_trigger_threshold"],
+        ["Crack", "cat_crack_detect_threshold", "cat_crack_trigger_threshold"],
+    ];
+
+    const invalid = [];
+    for (const [label, detectId, trigId] of pairs) {
+        const dEl = document.getElementById(detectId);
+        const tEl = document.getElementById(trigId);
+        if (!dEl || !tEl) continue;
+
+        const detect = parseFloat(dEl.value);
+        const trigger = parseFloat(tEl.value);
+
+        if (!(detect < trigger)) invalid.push(label);
+    }
+
+    if (invalid.length) {
+        if (errEl) errEl.textContent = `Detection must be lower than failure for: ${invalid.join(", ")}.`;
+        if (saveBtn) saveBtn.disabled = true;
+
+        // Re-enable button when user edits anything (no live validation; next save click re-checks)
+        const reenable = () => {
+            if (saveBtn) saveBtn.disabled = false;
+            if (errEl) errEl.textContent = "";
+            pairs.forEach(([_, dId, tId]) => {
+                const d = document.getElementById(dId);
+                const t = document.getElementById(tId);
+                if (d) d.removeEventListener("input", reenable);
+                if (t) t.removeEventListener("input", reenable);
+            });
+        };
+        pairs.forEach(([_, dId, tId]) => {
+            const d = document.getElementById(dId);
+            const t = document.getElementById(tId);
+            if (d) d.addEventListener("input", reenable);
+            if (t) t.addEventListener("input", reenable);
+        });
+
+        return;
+    }
+    
     currentSettings.ai_categories = {
         spaghetti: {
             enabled: document.getElementById("cat_spaghetti_enabled").checked,
@@ -984,9 +1078,13 @@ document.getElementById("save-ai-cat-btn").addEventListener("click", async () =>
         body: JSON.stringify(currentSettings)
     });
 
-    settingsPages.classList.remove("show-ai");
-
-    alert("AI Category Settings Saved!");
+    if (statusEl) {
+        statusEl.textContent = "Saved ✓";
+        statusEl.className = "save-status success";
+    }
+    setTimeout(() => {
+        settingsPages.classList.remove("show-ai");
+    }, 700);
 });
 
 /********************************************************************
@@ -1087,6 +1185,37 @@ function renderFailureHistory() {
  ********************************************************************/
 let autoScrollLogs = true;
 
+let accumulatedLogLines = [];
+
+function mergeLogsIntoBuffer(logText) {
+    const newLines = (logText || "").split("\n");
+
+    if (accumulatedLogLines.length === 0) {
+        accumulatedLogLines = newLines;
+        return;
+    }
+
+    // Find overlap: suffix of accumulated that matches prefix of new
+    const maxOverlap = Math.min(accumulatedLogLines.length, newLines.length);
+    let overlap = 0;
+
+    for (let k = maxOverlap; k > 0; k--) {
+        let match = true;
+        for (let i = 0; i < k; i++) {
+            if (accumulatedLogLines[accumulatedLogLines.length - k + i] !== newLines[i]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) {
+            overlap = k;
+            break;
+        }
+    }
+
+    accumulatedLogLines.push(...newLines.slice(overlap));
+}
+
 const logsModal = document.getElementById("logs-modal");
 const logContent = document.getElementById("log-content");
 const openLogsBtn = document.getElementById("open-logs-btn");
@@ -1108,6 +1237,24 @@ if (closeLogsBtn && logsModal) {
     });
 }
 
+const downloadLogsBtn = document.getElementById("download-logs-btn");
+
+if (downloadLogsBtn) {
+    downloadLogsBtn.addEventListener("click", () => {
+        const text = accumulatedLogLines.join("\n");
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        const ts = new Date().toISOString().replace(/[:.]/g, "-");
+        a.href = url;
+        a.download = `failure_logs_${ts}.log`;
+        a.click();
+
+        URL.revokeObjectURL(url);
+    });
+}
+
 if (logContent) {
     logContent.addEventListener("scroll", () => {
         const atBottom =
@@ -1118,7 +1265,19 @@ if (logContent) {
 
 function updateLogView(logText) {
     if (!logContent) return;
+
+    const selection = window.getSelection();
+    if (
+        selection &&
+        !selection.isCollapsed &&
+        logContent.contains(selection.anchorNode)
+    ) {
+        return;
+    }
+
+    mergeLogsIntoBuffer(logText);
     logContent.textContent = logText || "";
+
     if (autoScrollLogs) {
         logContent.scrollTop = logContent.scrollHeight;
     }
