@@ -116,6 +116,7 @@
                 </div>
 
                 <div class="controls-right">
+                    <button id="open-history-btn" class="secondary-btn">History</button>
                     <button id="open-logs-btn" class="secondary-btn">Logs ▾</button>
                 </div>
             </div>
@@ -392,6 +393,33 @@
             <button id="reset-stats-btn" class="secondary-btn">
                 Reset Counters
             </button>
+        </div>
+    </dialog>
+    
+    <!-- Failure History modal -->
+    <dialog id="history-modal" class="modal history-modal">
+        <div class="modal-header">
+            <h3>Failure History</h3>
+            <button id="close-history-modal" class="icon-btn">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <div class="history-table">
+                <div id="history-scroll" class="history-scroll">
+                    <div class="history-table-header">
+                        <span>Time</span>
+                        <span>Camera</span>
+                        <span>Category</span>
+                        <span>Conf</span>
+                    </div>
+
+                    <div id="history-table-body"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button id="clear-history-btn" class="secondary-btn">Clear History</button>
         </div>
     </dialog>
     

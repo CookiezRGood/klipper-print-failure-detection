@@ -192,6 +192,9 @@ last_inference = {
     1: {"score": 0.0, "dets": []},
 }
 
+FAILURE_HISTORY = []
+MAX_FAILURE_HISTORY = 30
+
 # Normalize stats categories (handles model upgrades)
 for cam_id in state["stats"]:
     normalize_per_category(state["stats"][cam_id])
@@ -384,6 +387,7 @@ def run_inference(image):
 
 @app.route("/api/action/start", methods=["POST", "GET"])
 def action_start():
+    FAILURE_HISTORY.clear()
     state["stats"][0] = stats_block()
     state["stats"][1] = stats_block()
     normalize_per_category(state["stats"][0])
@@ -407,6 +411,7 @@ def action_stop():
 
 @app.route("/api/action/start_from_macro", methods=["POST"])
 def action_start_from_macro():
+    FAILURE_HISTORY.clear()
     state["stats"][0] = stats_block()
     state["stats"][1] = stats_block()
     normalize_per_category(state["stats"][0])
@@ -659,6 +664,10 @@ def background_monitor():
 
                     if ENABLE_TIMING_LOGS:
                         t0_draw = time.perf_counter()
+                    
+                    history_best_conf = 0.0
+                    history_best_category = None
+                    history_is_trigger = False
                     filtered_dets = []
                     for d in dets:
                         x, y, ww, hh = d["box"]
@@ -679,6 +688,10 @@ def background_monitor():
                             continue
 
                         filtered_dets.append(d)
+                        
+                        if conf > history_best_conf:
+                            history_best_conf = conf
+                            history_best_category = key
 
                         # per-category detections (only count on real inference)
                         if do_infer:
@@ -695,6 +708,7 @@ def background_monitor():
                             trigger_conf_here = max(trigger_conf_here, conf)
                             triggered_categories.add(key)
                             triggered_instance_count += 1
+                            history_is_trigger = True
                         else:
                             box_color = (0, 255, 255)
                             text_color = (0, 0, 0)
@@ -708,6 +722,18 @@ def background_monitor():
                         cv2.rectangle(debug, (x, ty-th-2), (x+tw, ty+2), box_color, -1)
                         cv2.putText(debug, text, (x, ty),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 1)
+                    
+                    if do_infer and history_best_category and not state["action_triggered"]:
+                        FAILURE_HISTORY.append({
+                            "time": time.strftime("%H:%M:%S"),
+                            "camera": cam_id,
+                            "category": history_best_category,
+                            "confidence": int(history_best_conf * 100),
+                            "severity": "trigger" if history_is_trigger else "detect"
+                        })
+
+                        if len(FAILURE_HISTORY) > MAX_FAILURE_HISTORY:
+                            FAILURE_HISTORY.pop(0)
                     
                     if ENABLE_TIMING_LOGS:
                         t_draw += time.perf_counter() - t0_draw
@@ -785,6 +811,14 @@ def background_monitor():
                     logging.info(
                         f"[FAILURE] {key.capitalize()} @ {int(trigger_conf_here * 100)}% | Cam {failure_cam}"
                     )
+                    
+                    FAILURE_HISTORY.append({
+                        "time": time.strftime("%H:%M:%S"),
+                        "camera": failure_cam,
+                        "category": "FULL FAILURE TRIGGERED",
+                        "confidence": int(trigger_conf_here * 100),
+                        "severity": "failure"
+                    })
                     
                     trigger_printer_action("AI detection")
 
@@ -864,6 +898,21 @@ def get_status():
         "failure_cam": state.get("failure_cam"),
         "failure_reason": state.get("failure_reason")
     })
+    
+# ================================================================
+#   FAILURE HISTORY API
+# ================================================================
+
+@app.route("/api/failure_history")
+def api_failure_history():
+    return jsonify({"events": FAILURE_HISTORY})
+
+
+@app.route("/api/failure_history/clear", methods=["POST"])
+def api_clear_failure_history():
+    FAILURE_HISTORY.clear()
+    logging.info("Failure history cleared")
+    return jsonify({"success": True})
 
 # ================================================================
 #   FRAME API

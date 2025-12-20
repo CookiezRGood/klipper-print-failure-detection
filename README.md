@@ -79,6 +79,10 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 - **Live Plugin Logs**: View the logs for the plugin on the main dashboard to check for functionality and see errors.
 
+- **Detection History Table**: Keep track of detections and failures that happen during the current print (30 max). Tracks when it occurs, which camera, the type of failure, and the % confidence level.
+
+![History](documents/images/history.png)
+
 ## Installation
 
 Clone this repository to your printer and install:

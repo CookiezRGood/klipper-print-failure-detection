@@ -6,6 +6,8 @@ let isMaskVisible = false;
 let suppressConfidenceUpdates = false;
 let lastConfidence = null;
 let lastStatus = null;
+let failureHistory = [];
+let renderedHistoryKeys = new Set();
 
 const statusBadge = document.getElementById('status-indicator');
 const ssimText = document.getElementById('ssim-val');
@@ -19,6 +21,13 @@ const overlay = document.getElementById('settings-overlay');
 const mainContent = document.getElementById('main-content');
 
 const cameraGrid = document.getElementById('camera-grid');
+
+const historyModal = document.getElementById("history-modal");
+const openHistoryBtn = document.getElementById("open-history-btn");
+const closeHistoryBtn = document.getElementById("close-history-modal");
+const historyBody = document.getElementById("history-table-body");
+const historyScroll = document.getElementById("history-scroll");
+const clearHistoryBtn = document.getElementById("clear-history-btn");
 
 // Camera references
 const cam1Img = document.getElementById('cam1-img');
@@ -825,6 +834,21 @@ if (resetStatsBtn) {
 }
 
 /********************************************************************
+ * Clear Failure History
+ ********************************************************************/
+
+if (clearHistoryBtn) {
+    clearHistoryBtn.addEventListener("click", async () => {
+        try {
+            await fetch("/api/failure_history/clear", { method: "POST" });
+            failureHistory = [];
+            renderedHistoryKeys.clear();
+            renderFailureHistory();
+        } catch (e) {}
+    });
+}
+
+/********************************************************************
  * Save settings
  ********************************************************************/
 document.getElementById('save-settings-btn').addEventListener('click', async () => {
@@ -972,6 +996,93 @@ setupMaskDrawing(0, cam1View);
 setupMaskDrawing(1, cam2View);
 
 /********************************************************************
+ * FAILURE HISTORY MODAL
+ ********************************************************************/
+
+if (openHistoryBtn && historyModal) {
+    openHistoryBtn.addEventListener("click", () => {
+        historyModal.showModal();
+        historyModal.classList.add("show");
+        mainContent.classList.add("blurred");
+        renderFailureHistory();
+        fetchFailureHistory();
+    });
+}
+
+if (closeHistoryBtn && historyModal) {
+    closeHistoryBtn.addEventListener("click", () => {
+        historyModal.classList.remove("show");
+        historyModal.close();
+        mainContent.classList.remove("blurred");
+    });
+}
+
+async function fetchFailureHistory() {
+    try {
+        const res = await fetch("/api/failure_history");
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const newHistory = data.events || [];
+
+        if (newHistory.length !== failureHistory.length) {
+            failureHistory = newHistory;
+            renderFailureHistory();
+        }
+    } catch (e) {}
+}
+
+function renderFailureHistory() {
+    if (!historyBody) return;
+
+    historyBody.innerHTML = "";
+
+    if (failureHistory.length === 0) {
+        historyBody.innerHTML =
+            `<div class="history-empty">No failures this session</div>`;
+        return;
+    }
+
+    [...failureHistory].reverse().forEach(evt => {
+
+        // --- FULL FAILURE DIVIDER ROW ---
+        if (evt.severity === "failure") {
+            const divider = document.createElement("div");
+            divider.className = "history-divider";
+            divider.textContent = "— PRINT FAILURE TRIGGERED —";
+            historyBody.appendChild(divider);
+            return; // IMPORTANT: do not render a normal row
+        }
+
+        // --- NORMAL HISTORY ROW ---
+        const row = document.createElement("div");
+
+        const key = `${evt.time}-${evt.camera}-${evt.category}-${evt.confidence}`;
+
+        if (!renderedHistoryKeys.has(key)) {
+            row.className = "history-row enter";
+            renderedHistoryKeys.add(key);
+        } else {
+            row.className = "history-row";
+        }
+
+        const camLabel = evt.camera === 0 ? "Primary" : "Secondary";
+
+        row.innerHTML = `
+            <span class="history-time">${evt.time}</span>
+            <span class="history-cam">${camLabel}</span>
+            <span class="history-cat">${evt.category}</span>
+            <span class="history-conf ${evt.severity}">
+                ${evt.confidence}%
+            </span>
+        `;
+
+        historyBody.appendChild(row);
+    });
+    
+}
+
+/********************************************************************
  * LOGS MODAL
  ********************************************************************/
 let autoScrollLogs = true;
@@ -1013,7 +1124,18 @@ function updateLogView(logText) {
     }
 }
 
-// Poll logs (always ok; you can restrict to logsModal.open if you want)
+// Poll failure history
+setInterval(() => {
+    if (
+        historyModal &&
+        historyModal.open &&
+        (lastStatus === "monitoring" || lastStatus === "failure_detected")
+    ) {
+        fetchFailureHistory();
+    }
+}, 2000);
+
+// Poll logs
 setInterval(async () => {
     try {
         const res = await fetch("/api/logs");

@@ -441,6 +441,7 @@ header h2 {
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    gap: 10px;
 }
 
 /* DESKTOP: prevent bottom UI from collapsing on short windows */
@@ -1217,6 +1218,180 @@ dialog#settings-modal {
 .stats-table-row span:nth-child(2),
 .stats-table-row span:nth-child(3) {
     text-align: center;
+}
+
+/* =============================
+   FAILURE HISTORY MODAL
+   ============================= */
+
+.history-modal {
+    max-width: 760px;
+    border-radius: 10px;
+    border: 1px solid #333;
+    background: #1b1b1b;
+}
+
+.history-modal .modal-header {
+    padding-left: 0px;
+}
+
+.history-modal .modal-header h3 {
+    color: #f5f5f5;
+}
+
+.history-modal.show {
+    transform: translateY(0);
+}
+
+.history-table {
+    display: grid;
+    gap: 10px;
+    padding: 6px 4px;
+    align-content: start;
+}
+
+.history-scroll {
+    height: 260px;
+    overflow-y: auto;
+
+    scrollbar-gutter: stable;
+    padding-right: 12px;
+}
+
+#history-table-body {
+    display: grid;
+    grid-auto-rows: min-content;
+    align-content: start;
+    gap: 14px;
+}
+
+.history-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+
+.history-scroll::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 6px;
+}
+
+.history-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.history-table-header,
+.history-row {
+    display: grid;
+    grid-template-columns: 1.4fr 1.1fr 1.8fr 0.7fr;
+    font-size: 0.8rem;
+
+    column-gap: 16px;
+}
+
+.history-table-header {
+    color: #bbb;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-bottom: 1px solid #333;
+    padding-bottom: 4px;
+}
+
+.history-table-header span:nth-child(1) {
+    justify-self: center;
+    text-align: center;
+}
+.history-table-header span:nth-child(2),
+.history-table-header span:nth-child(3) {
+    justify-self: start;
+    text-align: left;
+}
+
+.history-table-header span:nth-child(4) {
+    justify-self: end;
+    text-align: right;
+}
+
+.history-scroll .history-table-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #1b1b1b;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.history-row {
+    padding: 6px 4px;
+    border-radius: 6px;
+    align-items: center;
+    opacity: 1;
+}
+
+.history-row:nth-child(odd) {
+    background: rgba(255,255,255,0.04);
+}
+
+.history-time {
+    color: #aaa;
+    font-family: monospace;
+}
+
+.history-cam {
+    color: #90caf9;
+}
+
+.history-cat {
+    color: #e0e0e0;
+    text-transform: capitalize;
+}
+
+.history-conf {
+    text-align: right;
+    font-weight: 700;
+}
+
+/* Severity coloring */
+.history-conf.detect {
+    color: #fbc02d;
+}
+
+.history-conf.trigger {
+    color: #ff6b6b;
+}
+
+.history-empty {
+    text-align: center;
+    font-size: 0.8rem;
+    color: #777;
+    padding: 10px 0;
+}
+
+.history-divider {
+    margin: 10px 0;
+    padding: 6px 0;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #ff6b6b;
+    border-top: 1px solid #444;
+    border-bottom: 1px solid #444;
+    letter-spacing: 0.08em;
+}
+
+.history-modal .modal-footer {
+    padding-top: 14px;
+}
+
+@keyframes history-row-enter {
+    from {
+        opacity: 0.6;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.history-row.enter {
+    animation: history-row-enter 0.4s ease;
 }
 
 /* Logs modal */
