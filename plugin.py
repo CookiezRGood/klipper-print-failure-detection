@@ -9,7 +9,7 @@ import os
 from flask import Flask, jsonify, request, Response, send_from_directory
 
 # ================================================================
-#   LOGGING SETUP (ADDED FOR FLOATING LOG PANEL)
+#   LOGGING SETUP
 # ================================================================
 
 log = logging.getLogger("werkzeug")
@@ -108,6 +108,11 @@ default_config = {
     "cam2_aspect_ratio": "4:3",
     "notify_mobileraker": False,
 
+    # UI Theme
+    "ui_theme": "dark",
+    "custom_theme": {},
+
+
     # Mask zones
     "masks": {"0": [], "1": []},
 
@@ -153,6 +158,10 @@ if os.path.exists(SETTINGS_FILE):
                 config["masks"] = default_config["masks"]
             if "ai_categories" not in config:
                 config["ai_categories"] = default_config["ai_categories"]
+            if "ui_theme" not in config:
+                config["ui_theme"] = default_config.get("ui_theme", "dark")
+            if "custom_theme" not in config:
+                config["custom_theme"] = default_config.get("custom_theme", {})
     except Exception:
         pass
 
@@ -279,6 +288,43 @@ def load_model():
         return False
 
 ai_ready = load_model()
+
+# Map theme mask colors (hex) to use when drawing overlays server-side.
+MASK_COLOR_MAP = {
+    "dark": "#ff00ff",
+    "light": "#a21caf",
+    "midnight": "#a78bfa",
+    "crimson": "#ff7a2a",
+    "mint": "#2dd4bf",
+    "forest": "#4fa86f",
+    "aurora": "#a78bfa",
+    "voron": "#ff2d2d",
+}
+
+def hex_to_bgr(hexstr):
+    """Convert hex color (#rrggbb) to BGR tuple for OpenCV."""
+    if not hexstr:
+        return (255, 0, 255)
+    h = hexstr.lstrip("#")
+    if len(h) != 6:
+        return (255, 0, 255)
+    r = int(h[0:2], 16)
+    g = int(h[2:4], 16)
+    b = int(h[4:6], 16)
+    return (b, g, r)
+
+def get_mask_color_for_theme(theme_name, custom_theme):
+    """Return BGR color tuple for the given theme name or custom theme dict."""
+    # custom_theme may include a 'mask' hex value
+    if custom_theme and isinstance(custom_theme, dict):
+        m = custom_theme.get("mask")
+        if m:
+            return hex_to_bgr(m)
+
+    hexval = MASK_COLOR_MAP.get(theme_name)
+    if not hexval:
+        hexval = MASK_COLOR_MAP.get("dark")
+    return hex_to_bgr(hexval)
 
 # ================================================================
 #   AI INFERENCE
@@ -599,6 +645,8 @@ def background_monitor():
 
                     # Apply masks
                     zones = masks_cfg.get(str(cam_id), [])
+                    # Determine overlay color from theme/config
+                    mask_bgr = get_mask_color_for_theme(config.get("ui_theme", "dark"), config.get("custom_theme", {}))
                     for z in zones:
                         try:
                             zx = float(z["x"])
@@ -618,18 +666,8 @@ def background_monitor():
                         mw = max(1, min(mw, w - mx))
                         mh = max(1, min(mh, h - my))
 
+                        # Black-out masked areas for AI processing
                         cv2.rectangle(img, (mx, my), (mx+mw, my+mh), (0,0,0), -1)
-
-                        if state["show_mask_overlay"]:
-                            overlay = debug.copy()
-                            cv2.rectangle(
-                                overlay,
-                                (mx, my),
-                                (mx+mw, my+mh),
-                                (255, 0, 255),
-                                -1
-                            )
-                            cv2.addWeighted(overlay, 0.20, debug, 0.80, 0, debug)
 
                     if not ai_enabled:
                         state["cameras"][cam_id]["frame"] = debug
@@ -927,11 +965,53 @@ def get_frame(cam_id):
         ok, buf = cv2.imencode(".jpg", blank)
         return Response(buf.tobytes(), mimetype="image/jpeg")
 
-    ok, buf = cv2.imencode(".jpg", state["cameras"][cam_id]["frame"])
+    frame = state["cameras"][cam_id]["frame"].copy()
+
+    # If client passed a mask_color, use it to render the overlay on-the-fly.
+    mask_color_hex = request.args.get("mask_color")
+    show_mask = state.get("show_mask_overlay", False)
+
+    # Only render visual overlays when the UI has requested mask visualization.
+    if show_mask:
+        # prefer explicit client color; otherwise use theme/config mapping
+        if mask_color_hex:
+            mask_bgr = hex_to_bgr(mask_color_hex)
+        else:
+            mask_bgr = get_mask_color_for_theme(config.get("ui_theme", "dark"), config.get("custom_theme", {}))
+
+        zones_cfg = config.get("masks", {}).get(str(cam_id), [])
+        if zones_cfg:
+            overlay = frame.copy()
+            h, w = frame.shape[:2]
+            for z in zones_cfg:
+                try:
+                    zx = float(z.get("x", 0))
+                    zy = float(z.get("y", 0))
+                    zw = float(z.get("w", 0))
+                    zh = float(z.get("h", 0))
+                except Exception:
+                    continue
+
+                mx = int(zx * w)
+                my = int(zy * h)
+                mw = int(zw * w)
+                mh = int(zh * h)
+
+                mx = max(0, min(mx, w - 1))
+                my = max(0, min(my, h - 1))
+                mw = max(1, min(mw, w - mx))
+                mh = max(1, min(mh, h - my))
+
+                cv2.rectangle(overlay, (mx, my), (mx+mw, my+mh), mask_bgr, -1)
+
+            # Blend overlay onto frame
+            cv2.addWeighted(overlay, 0.20, frame, 0.80, 0, frame)
+
+    ok, buf = cv2.imencode(".jpg", frame)
     return Response(buf.tobytes(), mimetype="image/jpeg")
 
 # ================================================================
-#   LOG PANEL ENDPOINT (ADDED)
+#   LOG PANEL ENDPOINT
 # ================================================================
 
 @app.route("/api/logs")

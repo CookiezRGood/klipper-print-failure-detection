@@ -138,9 +138,293 @@
 
         <div id="settings-pages">
 
-            <!-- PAGE 1 — MAIN SETTINGS -->
+            <!-- PAGE 1 — THEME SETTINGS -->
+            <div id="theme-page">
+                <div class="modal-body theme-page-body">
+                    <div class="page-header">
+                        <h4>Dashboard Theme</h4>
+                        <span id="theme-unsaved-warning" class="inline-unsaved-warning" style="display: none;">⚠ Unsaved changes</span>
+                    </div>
+
+                    <div class="theme-modal-body">
+                        <div class="theme-card" data-theme-choice="dark">
+                            <div class="theme-card-title">
+                                <input type="radio" name="theme-choice" value="dark" />
+                                <span>Dark (Default)</span>
+                            </div>
+                            <div class="theme-swatch-row">
+                                <div class="theme-swatch" style="background: #0d0d0d;"></div>
+                                <div class="theme-swatch" style="background: #1b1b1b;"></div>
+                                <div class="theme-swatch" style="background: #2196F3;"></div>
+                                <div class="theme-swatch" style="background: #ff00ff;"></div>
+                                <div class="theme-swatch" style="background: #f5f5f5;"></div>
+                                <div class="theme-swatch" style="background: rgba(255,255,255,0.22);"></div>
+                            </div>
+                        </div>
+
+                        <div class="theme-card" data-theme-choice="light">
+                            <div class="theme-card-title">
+                                <input type="radio" name="theme-choice" value="light" />
+                                <span>Light</span>
+                            </div>
+                            <div class="theme-swatch-row">
+                                <div class="theme-swatch" style="background: #f4f6f9;"></div>
+                                <div class="theme-swatch" style="background: #ffffff;"></div>
+                                <div class="theme-swatch" style="background: #2563eb;"></div>
+                                <div class="theme-swatch" style="background: #a21caf;"></div>
+                                <div class="theme-swatch" style="background: #111827;"></div>
+                                <div class="theme-swatch" style="background: #9ca3af;"></div>
+                            </div>
+                        </div>
+
+                        <div class="theme-card" data-theme-choice="midnight">
+                            <div class="theme-card-title">
+                                <input type="radio" name="theme-choice" value="midnight" />
+                                <span>Midnight</span>
+                            </div>
+                            <div class="theme-swatch-row">
+                                <div class="theme-swatch" style="background: #0b0716;"></div>
+                                <div class="theme-swatch" style="background: #120b1d;"></div>
+                                <div class="theme-swatch" style="background: #8b5cf6;"></div>
+                                <div class="theme-swatch" style="background: #a78bfa;"></div>
+                                <div class="theme-swatch" style="background: #f6f0fb;"></div>
+                                <div class="theme-swatch" style="background: #bfaed1;"></div>
+                            </div>
+                        </div>
+
+                        <div class="theme-card" data-theme-choice="crimson">
+                            <div class="theme-card-title">
+                                <input type="radio" name="theme-choice" value="crimson" />
+                                <span>Crimson</span>
+                            </div>
+                            <div class="theme-swatch-row">
+                                <div class="theme-swatch" style="background: #3a0f0a;"></div>
+                                <div class="theme-swatch" style="background: #52150f;"></div>
+                                <div class="theme-swatch" style="background: #ff6a00;"></div>
+                                <div class="theme-swatch" style="background: #ff7a2a;"></div>
+                                <div class="theme-swatch" style="background: #fff6f2;"></div>
+                                <div class="theme-swatch" style="background: #e7cfc7;"></div>
+                            </div>
+                        </div>
+
+                        <div class="theme-card" data-theme-choice="mint">
+                            <div class="theme-card-title">
+                                <input type="radio" name="theme-choice" value="mint" />
+                                <span>Mint</span>
+                            </div>
+                            <div class="theme-swatch-row">
+                                <div class="theme-swatch" style="background: #9dddd3;"></div>
+                                <div class="theme-swatch" style="background: #cdf1e7;"></div>
+                                <div class="theme-swatch" style="background: #84e1f1;"></div>
+                                <div class="theme-swatch" style="background: #2dd4bf;"></div>
+                                <div class="theme-swatch" style="background: #03383a;"></div>
+                                <div class="theme-swatch" style="background: #bfeee9;"></div>
+                            </div>
+                        </div>
+
+                        <div class="theme-card" data-theme-choice="forest">
+                            <div class="theme-card-title">
+                                <input type="radio" name="theme-choice" value="forest" />
+                                <span>Forest</span>
+                            </div>
+                            <div class="theme-swatch-row">
+                                <div class="theme-swatch" style="background: #07160b;"></div>
+                                <div class="theme-swatch" style="background: #0d2416;"></div>
+                                <div class="theme-swatch" style="background: #4b8f4b;"></div>
+                                <div class="theme-swatch" style="background: #4fa86f;"></div>
+                                <div class="theme-swatch" style="background: #eaf6ea;"></div>
+                                <div class="theme-swatch" style="background: rgba(76,93,83,0.20);"></div>
+                            </div>
+                        </div>
+
+                        <div class="theme-card" data-theme-choice="aurora">
+                            <div class="theme-card-title">
+                                <input type="radio" name="theme-choice" value="aurora" />
+                                <span>Aurora</span>
+                            </div>
+                            <div class="theme-swatch-row">
+                                <div class="theme-swatch" style="background: #02050c;"></div>
+                                <div class="theme-swatch" style="background: #0e2430;"></div>
+                                <div class="theme-swatch" style="background: #3bc5c5;"></div>
+                                <div class="theme-swatch" style="background: #8b7fff;"></div>
+                                <div class="theme-swatch" style="background: #e8f4ff;"></div>
+                                <div class="theme-swatch" style="background: #3bdb8f;"></div>
+                            </div>
+                        </div>
+
+                        <div class="theme-card" data-theme-choice="voron">
+                            <div class="theme-card-title">
+                                <input type="radio" name="theme-choice" value="voron" />
+                                <span>Voron</span>
+                            </div>
+                            <div class="theme-swatch-row">
+                                <div class="theme-swatch" style="background: #0b0c10;"></div>
+                                <div class="theme-swatch" style="background: #12141c;"></div>
+                                <div class="theme-swatch" style="background: #ff2d2d;"></div>
+                                <div class="theme-swatch" style="background: #ff2d2d;"></div>
+                                <div class="theme-swatch" style="background: #f6f6f6;"></div>
+                                <div class="theme-swatch" style="background: #3f4656;"></div>
+                            </div>
+                        </div>
+
+                        <div class="custom-theme-panel">
+                            <div class="theme-card-title">
+                                <input type="radio" name="theme-choice" value="custom" />
+                                <span>Custom</span>
+                                <span style="color: var(--text-muted); font-weight: 500;">(advanced)</span>
+                            </div>
+
+                            <div class="custom-sections">
+                                <!-- Backgrounds Section -->
+                                <div class="custom-section">
+                                    <div class="custom-section-header">
+                                        <span>Backgrounds</span>
+                                        <button type="button" class="section-toggle" data-target="bg-section">▶</button>
+                                    </div>
+                                    <div class="custom-section-body collapsed" id="bg-section">
+                                        <div class="custom-field">
+                                            <span>Main Background</span>
+                                            <input id="custom-bg-main" type="color" value="#0d0d0d" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Card Background</span>
+                                            <input id="custom-bg-card" type="color" value="#1b1b1b" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Panel Background</span>
+                                            <input id="custom-bg-panel" type="color" value="#1a1a1a" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Elevated Background</span>
+                                            <input id="custom-bg-elevated" type="color" value="#181818" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Input Background</span>
+                                            <input id="custom-bg-input" type="color" value="#111111" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Text Section -->
+                                <div class="custom-section">
+                                    <div class="custom-section-header">
+                                        <span>Text Colors</span>
+                                        <button type="button" class="section-toggle" data-target="text-section">▶</button>
+                                    </div>
+                                    <div class="custom-section-body collapsed" id="text-section">
+                                        <div class="custom-field">
+                                            <span>Main Text</span>
+                                            <input id="custom-text-main" type="color" value="#f5f5f5" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Muted Text</span>
+                                            <input id="custom-text-muted" type="color" value="#aaaaaa" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Soft Text</span>
+                                            <input id="custom-text-soft" type="color" value="#bbbbbb" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Text (Inverse/on accent)</span>
+                                            <input id="custom-text-inverse" type="color" value="#111111" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Primary Button Text</span>
+                                            <input id="custom-btn-primary-text" type="color" value="#f5f5f5" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Secondary Button Text</span>
+                                            <input id="custom-btn-secondary-text" type="color" value="#f5f5f5" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Accents Section -->
+                                <div class="custom-section">
+                                    <div class="custom-section-header">
+                                        <span>Accent & UI</span>
+                                        <button type="button" class="section-toggle" data-target="accent-section">▶</button>
+                                    </div>
+                                    <div class="custom-section-body collapsed" id="accent-section">
+                                        <div class="custom-field">
+                                            <span>Primary Accent</span>
+                                            <input id="custom-accent" type="color" value="#2196F3" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Accent (Soft)</span>
+                                            <input id="custom-accent-soft" type="color" value="#64b5f6" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Mask Color</span>
+                                            <input id="custom-mask" type="color" value="#ff00ff" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Status Colors Section -->
+                                <div class="custom-section">
+                                    <div class="custom-section-header">
+                                        <span>Status Colors</span>
+                                        <button type="button" class="section-toggle" data-target="status-section">▶</button>
+                                    </div>
+                                    <div class="custom-section-body collapsed" id="status-section">
+                                        <div class="custom-field">
+                                            <span>Success</span>
+                                            <input id="custom-success" type="color" value="#43a047" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Warning</span>
+                                            <input id="custom-warning" type="color" value="#fbc02d" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Danger</span>
+                                            <input id="custom-danger" type="color" value="#e53935" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Borders Section -->
+                                <div class="custom-section">
+                                    <div class="custom-section-header">
+                                        <span>Borders</span>
+                                        <button type="button" class="section-toggle" data-target="border-section">▶</button>
+                                    </div>
+                                    <div class="custom-section-body collapsed" id="border-section">
+                                        <div class="custom-field">
+                                            <span>Subtle Border</span>
+                                            <input id="custom-border-subtle" type="color" value="#333333" />
+                                        </div>
+                                        <div class="custom-field">
+                                            <span>Strong Border</span>
+                                            <input id="custom-border-strong" type="color" value="#555555" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer theme-footer">
+                    <div class="theme-footer-left">
+                        <button id="back-theme-btn" class="secondary-btn">Back</button>
+                        <button id="preview-theme-btn" class="secondary-btn">👁 Preview</button>
+                    </div>
+
+                    <div class="theme-footer-right">
+                        <div id="theme-save-status" class="save-status" aria-live="polite"></div>
+                        <button id="save-theme-btn" class="primary-btn">Save Theme</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- PAGE 2 — MAIN SETTINGS -->
             <div id="settings-page">
                 <div class="modal-body settings-grid">
+                    <div class="page-header">
+                        <h4>General Settings</h4>
+                        <span id="settings-page-unsaved-warning" class="inline-unsaved-warning" style="display: none;">⚠ Unsaved changes</span>
+                    </div>
 
                     <!-- CAMERA SETUP -->
                     <div class="setting-group">
@@ -272,18 +556,26 @@
 
                 </div>
 
-                <div class="modal-footer">
-                    <div id="settings-save-status" class="save-status" aria-live="polite"></div>
-                    <button id="save-settings-btn" class="primary-btn">Save Configuration</button>
+                <div class="modal-footer settings-footer">
+                    <div class="settings-footer-left">
+                        <button id="open-theme-btn" class="secondary-btn">🎨 Theme</button>
+                    </div>
+
+                    <div class="settings-footer-right">
+                        <div id="settings-save-status" class="save-status" aria-live="polite"></div>
+                        <button id="save-settings-btn" class="primary-btn">Save Configuration</button>
+                    </div>
                 </div>
             </div>
 
 
-            <!-- PAGE 2 — AI CATEGORY SETTINGS -->
+            <!-- PAGE 3 — AI CATEGORY SETTINGS -->
             <div id="ai-page">
                 <div class="modal-body ai-cat-page-body">
-
-                    <h4>AI Category Settings</h4>
+                    <div class="page-header">
+                        <h4>AI Category Settings</h4>
+                        <span id="ai-unsaved-warning" class="inline-unsaved-warning" style="display: none;">⚠ Unsaved changes</span>
+                    </div>
 
                     <div class="ai-cat-body">
 
@@ -347,23 +639,45 @@
 
                 </div>
 
-                <div class="modal-footer">
-                    <div>
-                        <div class="category-error-text" id="category-error-text"></div>
-                        <div class="save-status" id="category-save-status" aria-live="polite"></div>
+                <div class="modal-footer ai-footer">
+                    <div class="ai-footer-left">
+                        <button id="back-ai-btn" class="secondary-btn">Back</button>
                     </div>
 
                     <div class="ai-footer-right">
-                        <div id="ai-unsaved-warning" class="save-status error"></div>
-                        <button id="back-ai-btn" class="secondary-btn">Back</button>
+                        <div class="category-error-text" id="category-error-text"></div>
+                        <div class="save-status" id="category-save-status" aria-live="polite"></div>
                         <button id="save-ai-cat-btn" class="primary-btn">Save Category Settings</button>
                     </div>
                 </div>
             </div>
 
         </div>
-    
+        
     </dialog>
+
+    <!-- THEME PREVIEW DOCK (DASHBOARD OVERLAY) -->
+    <div id="theme-preview-dock" class="theme-preview-dock hidden">
+        <div class="preview-dock-header">
+            <span class="preview-title-line">Theme</span>
+            <span class="preview-title-line">Preview</span>
+        </div>
+
+        <div class="preview-theme-list">
+            <div class="preview-theme" data-theme="dark" title="Dark"></div>
+            <div class="preview-theme" data-theme="light" title="Light"></div>
+            <div class="preview-theme" data-theme="midnight" title="Midnight"></div>
+            <div class="preview-theme" data-theme="crimson" title="Crimson"></div>
+            <div class="preview-theme" data-theme="mint" title="Mint"></div>
+            <div class="preview-theme" data-theme="forest" title="Forest"></div>
+            <div class="preview-theme" data-theme="aurora" title="Aurora"></div>
+            <div class="preview-theme" data-theme="voron" title="Voron"></div>
+            <div class="preview-theme" data-theme="custom" title="Custom"></div>
+        </div>
+        
+        <button id="exit-preview-btn" class="secondary-btn exit-preview-btn" type="button">Exit Preview</button>
+        
+    </div>
     
 <!-- Per-category stats modal -->
     <dialog id="stats-modal" class="modal stats-modal">
