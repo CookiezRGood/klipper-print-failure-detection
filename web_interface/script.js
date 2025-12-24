@@ -310,12 +310,14 @@ if (cam1ClearBtn) {
     cam1ClearBtn.addEventListener('click', () => {
         maskZones[0] = [];
         syncMasksToServer();
+        showToast("Masks cleared");
     });
 }
 if (cam2ClearBtn) {
     cam2ClearBtn.addEventListener('click', () => {
         maskZones[1] = [];
         syncMasksToServer();
+        showToast("Masks cleared");
     });
 }
 

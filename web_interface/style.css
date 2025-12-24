@@ -20,7 +20,7 @@
     --border-strong: rgba(255,255,255,0.22);
 
     --accent: #2196F3;
-    --accent-soft: #64b5f6;
+    --accent-soft: #569eda;
 
     --success: #43a047;
     --warning: #fbc02d;
@@ -45,7 +45,7 @@
     --cam-ratio: 4 / 3;
     
     /* Layout & Component Variables */
-    --settings-footer-height: 50px;
+    --settings-footer-height: 40px;
     --toast-text: #ffffff;
     --toast-bg: var(--bg-panel);
     --control-knob: #ffffff;
@@ -772,19 +772,33 @@ header h2 {
 /* Disabled State */
 .disabled-overlay {
     position: absolute;
-    inset: 6px;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
     background: rgba(15, 15, 15, 0.8);
     color: var(--text-muted);
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 600;
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     text-transform: uppercase;
+    letter-spacing: 0.05em;
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.15s ease;
-    border-radius: 4px;
+    border-radius: 6px;
+    z-index: 10;
+    padding: 12px;
+    box-sizing: border-box;
+}
+.disabled-overlay span {
+    text-align: center;
+    word-break: break-word;
+    max-width: 100%;
 }
 .camera-card .disabled-overlay { transition: opacity 0.35s ease; }
 .camera-card.disabled .disabled-overlay { opacity: 1; }
@@ -1398,7 +1412,7 @@ dialog#settings-modal {
     align-content: start;
 }
 .history-scroll {
-    height: 600px;
+    height: 400px;
     overflow-y: auto;
     scrollbar-gutter: stable;
     padding-right: 12px;

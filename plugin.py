@@ -35,6 +35,10 @@ def add_log(msg: str):
         LOG_BUFFER = LOG_BUFFER[-LOG_MAX_LINES:]
     print(line)  # Also print to console
 
+def camera_name(cam_id):
+    """Convert camera ID to friendly name."""
+    return "Primary camera" if cam_id == 0 else "Secondary camera"
+
 # Patch logging.info / error so all logs also go to UI buffer
 _old_info = logging.info
 _old_error = logging.error
@@ -228,7 +232,7 @@ def wait_for_camera(cam_id, url, timeout_seconds=8):
         try:
             r = CAM_SESSIONS.get(cam_id, requests).get(url, timeout=1.2)
             if r.status_code == 200:
-                logging.info(f"Camera {cam_id} is ready.")
+                logging.info(f"{camera_name(cam_id)} is ready.")
                 camera_ready[cam_id] = True
                 return True
         except Exception:
@@ -236,7 +240,7 @@ def wait_for_camera(cam_id, url, timeout_seconds=8):
 
         time.sleep(0.6)
 
-    logging.warning(f"Camera {cam_id} did NOT become ready before timeout.")
+    logging.warning(f"{camera_name(cam_id)} did NOT become ready before timeout.")
     camera_ready[cam_id] = False
     return False
 
@@ -483,7 +487,7 @@ def reset_camera_stats(cam_id):
 
     state["stats"][cam_id] = stats_block()
 
-    logging.info(f"Stats reset for camera {cam_id}")
+    logging.info(f"Stats reset for {camera_name(cam_id)}")
     return jsonify({"success": True})
 
 # ================================================================
@@ -636,7 +640,7 @@ def background_monitor():
 
                     # If decoding failed, skip this frame safely
                     if img is None:
-                        logging.warning(f"Camera {cam_id} provided invalid image data.")
+                        logging.warning(f"{camera_name(cam_id)} provided invalid image data.")
                         state["cameras"][cam_id]["score"] = 0.0
                         continue
 
@@ -806,7 +810,7 @@ def background_monitor():
                 except Exception as e:
                     # Only log errors AFTER the camera succeeded at least once
                     if camera_ready.get(cam_id, False):
-                        logging.error(f"Camera {cam_id} error: {e}")
+                        logging.error(f"{camera_name(cam_id)} error: {e}")
 
                     state["cameras"][cam_id]["score"] = 0.0
                     state["cameras"][cam_id]["frame"] = None
@@ -911,6 +915,19 @@ def settings():
     if request.method == "POST":
         incoming = request.json
 
+        # Check if masks are being cleared
+        if "masks" in incoming:
+            old_masks = config.get("masks", {})
+            new_masks = incoming["masks"]
+            
+            for cam_id in ["0", "1"]:
+                old_mask_list = old_masks.get(cam_id, [])
+                new_mask_list = new_masks.get(cam_id, [])
+                
+                # If old had masks but new is empty, masks were cleared
+                if len(old_mask_list) > 0 and len(new_mask_list) == 0:
+                    logging.info(f"Masks cleared on {camera_name(int(cam_id))}")
+
         config.update(incoming)
         save_config_to_file()
         return jsonify({"status": "saved", "config": config})
@@ -960,8 +977,22 @@ def api_clear_failure_history():
 def get_frame(cam_id):
     if cam_id not in state["cameras"] or state["cameras"][cam_id]["frame"] is None:
         blank = np.zeros((360, 640, 3), np.uint8)
-        cv2.putText(blank, "NO SIGNAL / DISABLED", (50, 180),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (100,100,100), 2)
+
+        # Center the placeholder text so it doesn't get clipped by object-fit: cover
+        text = "NO SIGNAL / DISABLED"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.95
+        thickness = 2
+        color = (100, 100, 100)
+
+        text_size, _ = cv2.getTextSize(text, font, font_scale, thickness)
+        text_width, text_height = text_size
+        img_height, img_width = blank.shape[:2]
+
+        x = (img_width - text_width) // 2
+        y = (img_height + text_height) // 2
+
+        cv2.putText(blank, text, (x, y), font, font_scale, color, thickness, cv2.LINE_AA)
         ok, buf = cv2.imencode(".jpg", blank)
         return Response(buf.tobytes(), mimetype="image/jpeg")
 

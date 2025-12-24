@@ -1,9 +1,10 @@
-<h1 align="center">AI Print Failure Detection Plugin for Klipper/Mainsail</h1>
+<h1 align="center">AI Print Failure Detection Plugin for Klipper</h1>
 
 <p align="center">
-<img width="300" height="300" alt="Print Failure Detection Logo 3" src="https://github.com/user-attachments/assets/1e019f25-1e45-4589-92cd-c2b0f8e45231" />
-</p/
-## Local AI-Powered Failure Detection
+<img src="documents/images/logo.png" width=300>
+</p>
+
+## Local AI Vision Model for Failure Detection
 
 This plugin uses an optimized TensorFlow Lite model to detect print failures in real time. It runs fully locally on your Klipper host, requires no cloud services, and directly integrates with Moonraker to pause or cancel prints automatically.
 
@@ -28,21 +29,27 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 - **AI Failure Detection**: Uses a .tflite YOLO-based model to identify failures such as spaghetti, blobs, cracks, and warping.
 
-![AI Detection](documents/images/AI-detection.png)
+<p align="center">
+<img src="documents/images/AI-detection.png">
+</p>
 
-<br><br>
+<br>
 
 - **Real-Time Web Dashboard**: View live camera feeds with bounding box overlays showing what the AI detects. The number of detections and failures for that session is also tracked below the respective camera. (Works on desktop and mobile)
 
-![Dashboard](documents/images/dashboard.png)
+<p align="center">
+<img src="documents/images/dashboard.png">
+</p>
 
-<br><br>
+<br>
 
 - **Comprehensive Settings Menu**: Many configurable aspects to tailor the plugin to your printer and environment.
 
-![Settings-Main](documents/images/settings-main.png)
+<p align="center">
+<img src="documents/images/settings-main.png">
+</p>
 
-<br><br>
+<br>
 
 - **Multi-Camera Support**: Monitor and analyze up to two cameras simultaneously, each with its own prediction score and mask zones.
   
@@ -56,9 +63,11 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 - **AI Detection Categories**: Choose what types of print failures you want to detect and whether or not they can trigger a failure.
 
-![Settings-Category](documents/images/settings-category.png)
+<p align="center">
+<img src="documents/images/settings-category.png">
+</p>
 
-<br><br>
+<br>
   
 - **Multi-Zone Masking System**:
    - Click-and-drag to define any number of mask rectangles directly on the camera feed.
@@ -67,9 +76,11 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
    - Right-click to delete individual zones.
    - “Clear Masks” button for quick resets.
 
-![Masking](documents/images/masking.gif)
+<p align="center">
+<img src="documents/images/masking.gif">
+</p>
 
-<br><br>
+<br>
 
 - **Smart Idle Mode**: Automatically suspends AI processing when the printer is idle to reduce CPU usage.
 
@@ -81,7 +92,18 @@ The plugin includes a complete monitoring dashboard with live camera feeds, visu
 
 - **Detection History Table**: Keep track of detections and failures that happen during the current print (30 max). Tracks when it occurs, which camera, the type of failure, and the % confidence level.
 
-![History](documents/images/history.png)
+<p align="center">
+<img src="documents/images/history.png">
+</p>
+
+<br>
+
+- **Custom Dashboard Themes**: Change the color style of the dashboard using 8 premade themes or design your own custom theme.
+   - Use the preview button to view the dashboard and cycle through the themes to find your favorite.
+
+<p align="center">
+<img src="documents/images/settings-theme.png">
+</p>
 
 ## Installation
 
