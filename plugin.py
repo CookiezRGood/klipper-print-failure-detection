@@ -111,6 +111,7 @@ default_config = {
     "cam1_aspect_ratio": "4:3",
     "cam2_aspect_ratio": "4:3",
     "notify_mobileraker": False,
+    "send_summary": True,
 
     # UI Theme
     "ui_theme": "dark",
@@ -197,6 +198,8 @@ state = {
         0: stats_block(),
         1: stats_block()
     },
+    "_last_print_state": None,
+    "_print_summary_sent": False,
 }
 
 # Cache last inference results per camera
@@ -448,6 +451,7 @@ def action_start():
     state["failure_cam"] = None
     state["failure_reason"] = None
     state["manual_override"] = True
+    state["_print_summary_sent"] = False
     logging.info("Monitoring STARTED (manual)")
     return jsonify({"success": True})
 
@@ -457,6 +461,8 @@ def action_stop():
     state["failure_cam"] = None
     state["failure_reason"] = None
     logging.info("Monitoring STOPPED")
+    send_print_summary()
+    
     return jsonify({"success": True})
 
 @app.route("/api/action/start_from_macro", methods=["POST"])
@@ -507,6 +513,120 @@ def get_printer_state():
 # ================================================================
 #   ACTIONS ON FAILURE
 # ================================================================
+
+def send_to_console(message: str):
+    """Send a message to the printer console via M118 GCode command."""
+    url = config.get("moonraker_url", "").rstrip("/")
+    if not url:
+        return
+    
+    try:
+        requests.post(
+            f"{url}/printer/gcode/script",
+            json={"script": f"M118 {message}"}
+        )
+    except Exception:
+        pass
+
+
+def format_print_summary(camera_count: int) -> list:
+    """Format print summary messages per enabled category and camera slots.
+
+    - If `camera_count` == 1: send a single combined summary for cam 0 if enabled.
+    - If `camera_count` > 1: send per-camera summaries for each enabled cam slot,
+      labeled as Primary (0) and Secondary (1).
+    """
+    categories = config.get("ai_categories", {})
+    messages = []
+
+    cams_cfg = config.get("cameras", [])
+
+    def is_cam_enabled(cid: int) -> bool:
+        for c in cams_cfg:
+            if c.get("id") == cid:
+                return bool(c.get("enabled", False))
+        return False
+
+    # Single camera setup → combined message for cam 0 if enabled
+    if camera_count <= 1:
+        cam_id = 0
+        if not is_cam_enabled(cam_id):
+            return messages
+
+        stats = state["stats"].get(cam_id, stats_block())
+        per_cat = stats.get("per_category", {})
+
+        cat_stats = []
+        for cat_name in CATEGORY_KEYS:
+            cat_cfg = categories.get(cat_name)
+            if not cat_cfg or not cat_cfg.get("enabled", True):
+                continue
+
+            cat_data = per_cat.get(cat_name, {"detections": 0, "failures": 0})
+            dets = cat_data.get("detections", 0)
+            fails = cat_data.get("failures", 0)
+
+            label = cat_name.capitalize()
+            cat_stats.append(f"{label}: {dets} detections, {fails} failures")
+
+        if cat_stats:
+            messages.append(
+                ">>> AI DETECTION SUMMARY >>> " + " | ".join(cat_stats)
+            )
+
+        return messages
+
+    # Multi-camera setup → per-camera messages for enabled cams only
+    for cam_id in range(camera_count):
+        if cam_id not in state["stats"]:
+            continue
+        if not is_cam_enabled(cam_id):
+            continue
+
+        cam_label = "Primary" if cam_id == 0 else "Secondary"
+        stats = state["stats"].get(cam_id, stats_block())
+        per_cat = stats.get("per_category", {})
+
+        cat_stats = []
+        for cat_name in CATEGORY_KEYS:
+            cat_cfg = categories.get(cat_name)
+            if not cat_cfg or not cat_cfg.get("enabled", True):
+                continue
+
+            cat_data = per_cat.get(cat_name, {"detections": 0, "failures": 0})
+            dets = cat_data.get("detections", 0)
+            fails = cat_data.get("failures", 0)
+
+            label = cat_name.capitalize()
+            cat_stats.append(f"{label}: {dets} detections, {fails} failures")
+
+        if cat_stats:
+            messages.append(
+                f">>> AI DETECTION SUMMARY - {cam_label} >>> " + " | ".join(cat_stats)
+            )
+
+    return messages
+
+
+def send_print_summary():
+    """Send print summary to console when print ends."""
+    if state["_print_summary_sent"]:
+        return  # Already sent for this print session
+    
+    # Respect user setting to disable summary
+    if not bool(config.get("send_summary", True)):
+        return
+    
+    camera_count = int(config.get("camera_count", 2))
+    # Note: format_print_summary internally filters to enabled cameras
+    messages = format_print_summary(camera_count)
+    
+    for msg in messages:
+        send_to_console(msg)
+        logging.info(f"Print summary: {msg}")
+    
+    state["_print_summary_sent"] = True
+
 
 def trigger_printer_action(reason="Failure"):
     if state["action_triggered"]:
@@ -573,6 +693,16 @@ def background_monitor():
             if ENABLE_TIMING_LOGS:
                 t_state += time.perf_counter() - t0
 
+            # ===== PRINT COMPLETION DETECTION =====
+            # Check if print transitioned from "printing" to "complete" or "cancelled"
+            if (state.get("_last_print_state") == "printing" and 
+                klip_state in ["complete", "cancelled"]):
+                # Print just ended
+                send_print_summary()
+            
+            # Update last print state for next iteration
+            state["_last_print_state"] = klip_state
+
             # Auto-disable only if NOT manually started
             if klip_state != "printing" and not state["manual_override"]:
                 if state["monitoring_active"]:
@@ -584,6 +714,7 @@ def background_monitor():
             if klip_state == "printing" and state.get("_last_state") != "printing":
                 # DO NOT auto-enable — just reset tracking variables
                 state["action_triggered"] = False
+                state["_print_summary_sent"] = False  # Reset flag for new print
 
             # Monitoring enabled only by macro/api
             ai_enabled = state["monitoring_active"]

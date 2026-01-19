@@ -527,6 +527,24 @@
                         </div>
                         
                         <div class="setting-row">
+                            <label>Detection Summary:</label>
+
+                            <div class="toggle-switch toggle-only">
+                                <input type="checkbox" id="send_summary">
+                                <label class="slider" for="send_summary"></label>
+                            </div>
+                        </div>
+
+                        <div class="help-tooltip">
+                            <span class="help-icon">?</span>
+                            <div class="help-tooltip-text">
+                                Sends a summary of detections and failures to the printer console after you stop monitoring or when the print ends.
+                                <br>
+                                (Only enabled categories and cameras included)
+                            </div>
+                        </div>
+
+                        <div class="setting-row">
                             <label>Send Mobileraker Notification:</label>
 
                             <div class="toggle-switch toggle-only">
@@ -537,7 +555,7 @@
 
                         <div class="help-tooltip">
                             <span class="help-icon">?</span>
-                            <div class="help-tooltip-text">
+                            <div class="help-tooltip-text help-tooltip-bottom">
                                 Sends a Mobileraker push notification when a failure is triggered.
                                 <br>
                                 ⚠️ Requires Mobileraker and MR_NOTIFY macro to be installed/setup.

@@ -529,6 +529,7 @@ button:disabled {
     position: relative;
     overflow: visible;
     contain: layout;
+    z-index: 99998;
 }
 .help-icon {
     width: 18px;
@@ -567,7 +568,7 @@ button:disabled {
     visibility: hidden;
     transform: translateY(-4px);
     transition: opacity 0.15s ease, transform 0.15s ease;
-    z-index: 999;
+    z-index: 99999;
     contain: paint;
 }
 .help-icon:hover + .help-tooltip-text,
@@ -576,6 +577,15 @@ button:disabled {
     transform: translateY(0);
     pointer-events: auto;
     visibility: visible;
+}
+.help-tooltip-text.help-tooltip-bottom {
+    top: auto;
+    bottom: 50%;
+    transform: translateY(4px);
+}
+.help-icon:hover + .help-tooltip-text.help-tooltip-bottom,
+.help-tooltip-text.help-tooltip-bottom:hover {
+    transform: translateY(0);
 }
 
 /* ==========================================================================
@@ -1114,12 +1124,12 @@ dialog#settings-modal {
 #settings-page .modal-body .setting-group:nth-child(3) {
     grid-column: 1;
     grid-row: 3;
-    height: 340px;
+    height: 420px;
 }
 #settings-page .modal-body .setting-group:nth-child(4) {
     grid-column: 2;
     grid-row: 3;
-    height: 340px;
+    height: 420px;
 }
 
 /* Setting Groups & Rows */

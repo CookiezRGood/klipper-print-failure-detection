@@ -932,6 +932,12 @@ async function loadSettings() {
         document.getElementById('on_failure').value =
             currentSettings.on_failure || "pause";
             
+        // AI Summary toggle
+        const sumToggle = document.getElementById("send_summary");
+        if (sumToggle) {
+            sumToggle.checked = currentSettings.send_summary ?? true;
+        }
+
         // Mobileraker notification
         document.getElementById("notify_mobileraker").checked =
             currentSettings.notify_mobileraker ?? false;
@@ -1809,6 +1815,10 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
         
     currentSettings.notify_mobileraker =
         document.getElementById("notify_mobileraker").checked;
+    
+    // AI Summary toggle
+    currentSettings.send_summary =
+        document.getElementById("send_summary").checked;
         
     currentSettings.infer_every_n_loops =
         parseInt(document.getElementById("infer_every_n_loops").value);
