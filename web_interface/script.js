@@ -642,6 +642,18 @@ function updateCam2SettingsVisibility(count) {
     else wrap.classList.remove("hidden");
 }
 
+function updateThresholdVisibility(count) {
+    const secondaryCameraThresholds = document.querySelectorAll(".secondary-camera-thresholds");
+    
+    if (parseInt(count) === 2) {
+        // Show secondary camera thresholds
+        secondaryCameraThresholds.forEach(el => el.style.display = "block");
+    } else {
+        // Hide secondary camera thresholds
+        secondaryCameraThresholds.forEach(el => el.style.display = "none");
+    }
+}
+
 /********************************************************************
  * Sync mask zones
  ********************************************************************/
@@ -858,13 +870,7 @@ async function loadSettings() {
             currentSettings.camera_count || 2;
             
         updateCam2SettingsVisibility(currentSettings.camera_count || 2);
-        
-        const camCountEl = document.getElementById("camera_count");
-        if (camCountEl) {
-            camCountEl.addEventListener("change", () => {
-                updateCam2SettingsVisibility(parseInt(camCountEl.value));
-            });
-        }
+        updateThresholdVisibility(currentSettings.camera_count || 2);
 
         // URLs
         document.getElementById('cam1_url_input').value = cam1.url || "";
@@ -885,44 +891,59 @@ async function loadSettings() {
             cats.spaghetti?.enabled ?? true;
         document.getElementById("cat_spaghetti_trigger").checked =
             cats.spaghetti?.trigger ?? true;
-        document.getElementById("cat_spaghetti_detect_threshold").value =
-            Math.round((cats.spaghetti?.detect_threshold ?? 0.3) * 100);
-
-        document.getElementById("cat_spaghetti_trigger_threshold").value =
-            Math.round((cats.spaghetti?.trigger_threshold ?? 0.7) * 100);
+        document.getElementById("cat_spaghetti_cam0_detect_threshold").value =
+            Math.round((cats.spaghetti?.cam0_detect_threshold ?? cats.spaghetti?.detect_threshold ?? 0.3) * 100);
+        document.getElementById("cat_spaghetti_cam0_trigger_threshold").value =
+            Math.round((cats.spaghetti?.cam0_trigger_threshold ?? cats.spaghetti?.trigger_threshold ?? 0.7) * 100);
+        document.getElementById("cat_spaghetti_cam1_detect_threshold").value =
+            Math.round((cats.spaghetti?.cam1_detect_threshold ?? 0.3) * 100);
+        document.getElementById("cat_spaghetti_cam1_trigger_threshold").value =
+            Math.round((cats.spaghetti?.cam1_trigger_threshold ?? 0.7) * 100);
 
         // Blob
         document.getElementById("cat_blob_enabled").checked =
             cats.blob?.enabled ?? true;
         document.getElementById("cat_blob_trigger").checked =
             cats.blob?.trigger ?? false;
-        document.getElementById("cat_blob_detect_threshold").value =
-            Math.round((cats.blob?.detect_threshold ?? 0.3) * 100);
-
-        document.getElementById("cat_blob_trigger_threshold").value =
-            Math.round((cats.blob?.trigger_threshold ?? 0.7) * 100);
+        document.getElementById("cat_blob_cam0_detect_threshold").value =
+            Math.round((cats.blob?.cam0_detect_threshold ?? cats.blob?.detect_threshold ?? 0.3) * 100);
+        document.getElementById("cat_blob_cam0_trigger_threshold").value =
+            Math.round((cats.blob?.cam0_trigger_threshold ?? cats.blob?.trigger_threshold ?? 0.7) * 100);
+        document.getElementById("cat_blob_cam1_detect_threshold").value =
+            Math.round((cats.blob?.cam1_detect_threshold ?? 0.3) * 100);
+        document.getElementById("cat_blob_cam1_trigger_threshold").value =
+            Math.round((cats.blob?.cam1_trigger_threshold ?? 0.7) * 100);
 
         // Crack
         document.getElementById("cat_crack_enabled").checked =
             cats.crack?.enabled ?? true;
         document.getElementById("cat_crack_trigger").checked =
             cats.crack?.trigger ?? false;
-        document.getElementById("cat_crack_detect_threshold").value =
-            Math.round((cats.crack?.detect_threshold ?? 0.3) * 100);
-
-        document.getElementById("cat_crack_trigger_threshold").value =
-            Math.round((cats.crack?.trigger_threshold ?? 0.7) * 100);
+        document.getElementById("cat_crack_cam0_detect_threshold").value =
+            Math.round((cats.crack?.cam0_detect_threshold ?? cats.crack?.detect_threshold ?? 0.3) * 100);
+        document.getElementById("cat_crack_cam0_trigger_threshold").value =
+            Math.round((cats.crack?.cam0_trigger_threshold ?? cats.crack?.trigger_threshold ?? 0.7) * 100);
+        document.getElementById("cat_crack_cam1_detect_threshold").value =
+            Math.round((cats.crack?.cam1_detect_threshold ?? 0.3) * 100);
+        document.getElementById("cat_crack_cam1_trigger_threshold").value =
+            Math.round((cats.crack?.cam1_trigger_threshold ?? 0.7) * 100);
 
         // Warping
         document.getElementById("cat_warping_enabled").checked =
             cats.warping?.enabled ?? true;
         document.getElementById("cat_warping_trigger").checked =
             cats.warping?.trigger ?? false;
-        document.getElementById("cat_warping_detect_threshold").value =
-            Math.round((cats.warping?.detect_threshold ?? 0.3) * 100);
-
-        document.getElementById("cat_warping_trigger_threshold").value =
-            Math.round((cats.warping?.trigger_threshold ?? 0.7) * 100);
+        document.getElementById("cat_warping_cam0_detect_threshold").value =
+            Math.round((cats.warping?.cam0_detect_threshold ?? cats.warping?.detect_threshold ?? 0.3) * 100);
+        document.getElementById("cat_warping_cam0_trigger_threshold").value =
+            Math.round((cats.warping?.cam0_trigger_threshold ?? cats.warping?.trigger_threshold ?? 0.7) * 100);
+        document.getElementById("cat_warping_cam1_detect_threshold").value =
+            Math.round((cats.warping?.cam1_detect_threshold ?? 0.3) * 100);
+        document.getElementById("cat_warping_cam1_trigger_threshold").value =
+            Math.round((cats.warping?.cam1_trigger_threshold ?? 0.7) * 100);
+        
+        // Update threshold visibility based on camera count
+        updateThresholdVisibility(currentSettings.camera_count || 2);
 
         // Failures
         document.getElementById('consecutive_failures').value =
@@ -1075,23 +1096,35 @@ openAiBtn.addEventListener("click", () => {
     const cats = currentSettings.ai_categories || {};
     document.getElementById("cat_spaghetti_enabled").checked = cats.spaghetti?.enabled ?? true;
     document.getElementById("cat_spaghetti_trigger").checked = cats.spaghetti?.trigger ?? true;
-    document.getElementById("cat_spaghetti_detect_threshold").value = Math.round((cats.spaghetti?.detect_threshold ?? 0.3) * 100);
-    document.getElementById("cat_spaghetti_trigger_threshold").value = Math.round((cats.spaghetti?.trigger_threshold ?? 0.7) * 100);
+    document.getElementById("cat_spaghetti_cam0_detect_threshold").value = Math.round((cats.spaghetti?.cam0_detect_threshold ?? cats.spaghetti?.detect_threshold ?? 0.3) * 100);
+    document.getElementById("cat_spaghetti_cam0_trigger_threshold").value = Math.round((cats.spaghetti?.cam0_trigger_threshold ?? cats.spaghetti?.trigger_threshold ?? 0.7) * 100);
+    document.getElementById("cat_spaghetti_cam1_detect_threshold").value = Math.round((cats.spaghetti?.cam1_detect_threshold ?? 0.3) * 100);
+    document.getElementById("cat_spaghetti_cam1_trigger_threshold").value = Math.round((cats.spaghetti?.cam1_trigger_threshold ?? 0.7) * 100);
     
     document.getElementById("cat_blob_enabled").checked = cats.blob?.enabled ?? true;
     document.getElementById("cat_blob_trigger").checked = cats.blob?.trigger ?? false;
-    document.getElementById("cat_blob_detect_threshold").value = Math.round((cats.blob?.detect_threshold ?? 0.3) * 100);
-    document.getElementById("cat_blob_trigger_threshold").value = Math.round((cats.blob?.trigger_threshold ?? 0.7) * 100);
+    document.getElementById("cat_blob_cam0_detect_threshold").value = Math.round((cats.blob?.cam0_detect_threshold ?? cats.blob?.detect_threshold ?? 0.3) * 100);
+    document.getElementById("cat_blob_cam0_trigger_threshold").value = Math.round((cats.blob?.cam0_trigger_threshold ?? cats.blob?.trigger_threshold ?? 0.7) * 100);
+    document.getElementById("cat_blob_cam1_detect_threshold").value = Math.round((cats.blob?.cam1_detect_threshold ?? 0.3) * 100);
+    document.getElementById("cat_blob_cam1_trigger_threshold").value = Math.round((cats.blob?.cam1_trigger_threshold ?? 0.7) * 100);
     
     document.getElementById("cat_crack_enabled").checked = cats.crack?.enabled ?? true;
     document.getElementById("cat_crack_trigger").checked = cats.crack?.trigger ?? true;
-    document.getElementById("cat_crack_detect_threshold").value = Math.round((cats.crack?.detect_threshold ?? 0.3) * 100);
-    document.getElementById("cat_crack_trigger_threshold").value = Math.round((cats.crack?.trigger_threshold ?? 0.7) * 100);
+    document.getElementById("cat_crack_cam0_detect_threshold").value = Math.round((cats.crack?.cam0_detect_threshold ?? cats.crack?.detect_threshold ?? 0.3) * 100);
+    document.getElementById("cat_crack_cam0_trigger_threshold").value = Math.round((cats.crack?.cam0_trigger_threshold ?? cats.crack?.trigger_threshold ?? 0.7) * 100);
+    document.getElementById("cat_crack_cam1_detect_threshold").value = Math.round((cats.crack?.cam1_detect_threshold ?? 0.3) * 100);
+    document.getElementById("cat_crack_cam1_trigger_threshold").value = Math.round((cats.crack?.cam1_trigger_threshold ?? 0.7) * 100);
     
     document.getElementById("cat_warping_enabled").checked = cats.warping?.enabled ?? true;
     document.getElementById("cat_warping_trigger").checked = cats.warping?.trigger ?? true;
-    document.getElementById("cat_warping_detect_threshold").value = Math.round((cats.warping?.detect_threshold ?? 0.3) * 100);
-    document.getElementById("cat_warping_trigger_threshold").value = Math.round((cats.warping?.trigger_threshold ?? 0.7) * 100);
+    document.getElementById("cat_warping_cam0_detect_threshold").value = Math.round((cats.warping?.cam0_detect_threshold ?? cats.warping?.detect_threshold ?? 0.3) * 100);
+    document.getElementById("cat_warping_cam0_trigger_threshold").value = Math.round((cats.warping?.cam0_trigger_threshold ?? cats.warping?.trigger_threshold ?? 0.7) * 100);
+    document.getElementById("cat_warping_cam1_detect_threshold").value = Math.round((cats.warping?.cam1_detect_threshold ?? 0.3) * 100);
+    document.getElementById("cat_warping_cam1_trigger_threshold").value = Math.round((cats.warping?.cam1_trigger_threshold ?? 0.7) * 100);
+    
+    // Use current dropdown value, not saved settings, so unsaved changes are reflected
+    const currentCameraCount = parseInt(document.getElementById("camera_count")?.value || 2);
+    updateThresholdVisibility(currentCameraCount);
 
     const aiWarn = document.getElementById("ai-unsaved-warning");
     if (aiWarn) { aiWarn.textContent = ""; aiWarn.style.display = "none"; }
@@ -1828,26 +1861,42 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     spaghetti: {
         enabled: document.getElementById("cat_spaghetti_enabled").checked,
         trigger: document.getElementById("cat_spaghetti_trigger").checked,
-        detect_threshold: document.getElementById("cat_spaghetti_detect_threshold").value / 100,
-        trigger_threshold: document.getElementById("cat_spaghetti_trigger_threshold").value / 100
+        detect_threshold: document.getElementById("cat_spaghetti_cam0_detect_threshold").value / 100,
+        trigger_threshold: document.getElementById("cat_spaghetti_cam0_trigger_threshold").value / 100,
+        cam0_detect_threshold: document.getElementById("cat_spaghetti_cam0_detect_threshold").value / 100,
+        cam0_trigger_threshold: document.getElementById("cat_spaghetti_cam0_trigger_threshold").value / 100,
+        cam1_detect_threshold: document.getElementById("cat_spaghetti_cam1_detect_threshold").value / 100,
+        cam1_trigger_threshold: document.getElementById("cat_spaghetti_cam1_trigger_threshold").value / 100
     },
     blob: {
         enabled: document.getElementById("cat_blob_enabled").checked,
         trigger: document.getElementById("cat_blob_trigger").checked,
-        detect_threshold: document.getElementById("cat_blob_detect_threshold").value / 100,
-        trigger_threshold: document.getElementById("cat_blob_trigger_threshold").value / 100
+        detect_threshold: document.getElementById("cat_blob_cam0_detect_threshold").value / 100,
+        trigger_threshold: document.getElementById("cat_blob_cam0_trigger_threshold").value / 100,
+        cam0_detect_threshold: document.getElementById("cat_blob_cam0_detect_threshold").value / 100,
+        cam0_trigger_threshold: document.getElementById("cat_blob_cam0_trigger_threshold").value / 100,
+        cam1_detect_threshold: document.getElementById("cat_blob_cam1_detect_threshold").value / 100,
+        cam1_trigger_threshold: document.getElementById("cat_blob_cam1_trigger_threshold").value / 100
     },
     crack: {
         enabled: document.getElementById("cat_crack_enabled").checked,
         trigger: document.getElementById("cat_crack_trigger").checked,
-        detect_threshold: document.getElementById("cat_crack_detect_threshold").value / 100,
-        trigger_threshold: document.getElementById("cat_crack_trigger_threshold").value / 100
+        detect_threshold: document.getElementById("cat_crack_cam0_detect_threshold").value / 100,
+        trigger_threshold: document.getElementById("cat_crack_cam0_trigger_threshold").value / 100,
+        cam0_detect_threshold: document.getElementById("cat_crack_cam0_detect_threshold").value / 100,
+        cam0_trigger_threshold: document.getElementById("cat_crack_cam0_trigger_threshold").value / 100,
+        cam1_detect_threshold: document.getElementById("cat_crack_cam1_detect_threshold").value / 100,
+        cam1_trigger_threshold: document.getElementById("cat_crack_cam1_trigger_threshold").value / 100
     },
     warping: {
         enabled: document.getElementById("cat_warping_enabled").checked,
         trigger: document.getElementById("cat_warping_trigger").checked,
-        detect_threshold: document.getElementById("cat_warping_detect_threshold").value / 100,
-        trigger_threshold: document.getElementById("cat_warping_trigger_threshold").value / 100
+        detect_threshold: document.getElementById("cat_warping_cam0_detect_threshold").value / 100,
+        trigger_threshold: document.getElementById("cat_warping_cam0_trigger_threshold").value / 100,
+        cam0_detect_threshold: document.getElementById("cat_warping_cam0_detect_threshold").value / 100,
+        cam0_trigger_threshold: document.getElementById("cat_warping_cam0_trigger_threshold").value / 100,
+        cam1_detect_threshold: document.getElementById("cat_warping_cam1_detect_threshold").value / 100,
+        cam1_trigger_threshold: document.getElementById("cat_warping_cam1_trigger_threshold").value / 100
     }
 };
 
@@ -1931,10 +1980,14 @@ document.getElementById("save-ai-cat-btn").addEventListener("click", async () =>
 
     // Validation: detect must be STRICTLY less than trigger (failure)
     const pairs = [
-        ["Spaghetti", "cat_spaghetti_detect_threshold", "cat_spaghetti_trigger_threshold"],
-        ["Blob", "cat_blob_detect_threshold", "cat_blob_trigger_threshold"],
-        ["Warping", "cat_warping_detect_threshold", "cat_warping_trigger_threshold"],
-        ["Crack", "cat_crack_detect_threshold", "cat_crack_trigger_threshold"],
+        ["Spaghetti (Cam0)", "cat_spaghetti_cam0_detect_threshold", "cat_spaghetti_cam0_trigger_threshold"],
+        ["Spaghetti (Cam1)", "cat_spaghetti_cam1_detect_threshold", "cat_spaghetti_cam1_trigger_threshold"],
+        ["Blob (Cam0)", "cat_blob_cam0_detect_threshold", "cat_blob_cam0_trigger_threshold"],
+        ["Blob (Cam1)", "cat_blob_cam1_detect_threshold", "cat_blob_cam1_trigger_threshold"],
+        ["Warping (Cam0)", "cat_warping_cam0_detect_threshold", "cat_warping_cam0_trigger_threshold"],
+        ["Warping (Cam1)", "cat_warping_cam1_detect_threshold", "cat_warping_cam1_trigger_threshold"],
+        ["Crack (Cam0)", "cat_crack_cam0_detect_threshold", "cat_crack_cam0_trigger_threshold"],
+        ["Crack (Cam1)", "cat_crack_cam1_detect_threshold", "cat_crack_cam1_trigger_threshold"],
     ];
 
     const invalid = [];
@@ -1978,26 +2031,42 @@ document.getElementById("save-ai-cat-btn").addEventListener("click", async () =>
         spaghetti: {
             enabled: document.getElementById("cat_spaghetti_enabled").checked,
             trigger: document.getElementById("cat_spaghetti_trigger").checked,
-            detect_threshold: document.getElementById("cat_spaghetti_detect_threshold").value / 100,
-            trigger_threshold: document.getElementById("cat_spaghetti_trigger_threshold").value / 100
+            detect_threshold: document.getElementById("cat_spaghetti_cam0_detect_threshold").value / 100,
+            trigger_threshold: document.getElementById("cat_spaghetti_cam0_trigger_threshold").value / 100,
+            cam0_detect_threshold: document.getElementById("cat_spaghetti_cam0_detect_threshold").value / 100,
+            cam0_trigger_threshold: document.getElementById("cat_spaghetti_cam0_trigger_threshold").value / 100,
+            cam1_detect_threshold: document.getElementById("cat_spaghetti_cam1_detect_threshold").value / 100,
+            cam1_trigger_threshold: document.getElementById("cat_spaghetti_cam1_trigger_threshold").value / 100
         },
         blob: {
             enabled: document.getElementById("cat_blob_enabled").checked,
             trigger: document.getElementById("cat_blob_trigger").checked,
-            detect_threshold: document.getElementById("cat_blob_detect_threshold").value / 100,
-            trigger_threshold: document.getElementById("cat_blob_trigger_threshold").value / 100
+            detect_threshold: document.getElementById("cat_blob_cam0_detect_threshold").value / 100,
+            trigger_threshold: document.getElementById("cat_blob_cam0_trigger_threshold").value / 100,
+            cam0_detect_threshold: document.getElementById("cat_blob_cam0_detect_threshold").value / 100,
+            cam0_trigger_threshold: document.getElementById("cat_blob_cam0_trigger_threshold").value / 100,
+            cam1_detect_threshold: document.getElementById("cat_blob_cam1_detect_threshold").value / 100,
+            cam1_trigger_threshold: document.getElementById("cat_blob_cam1_trigger_threshold").value / 100
         },
         crack: {
             enabled: document.getElementById("cat_crack_enabled").checked,
             trigger: document.getElementById("cat_crack_trigger").checked,
-            detect_threshold: document.getElementById("cat_crack_detect_threshold").value / 100,
-            trigger_threshold: document.getElementById("cat_crack_trigger_threshold").value / 100
+            detect_threshold: document.getElementById("cat_crack_cam0_detect_threshold").value / 100,
+            trigger_threshold: document.getElementById("cat_crack_cam0_trigger_threshold").value / 100,
+            cam0_detect_threshold: document.getElementById("cat_crack_cam0_detect_threshold").value / 100,
+            cam0_trigger_threshold: document.getElementById("cat_crack_cam0_trigger_threshold").value / 100,
+            cam1_detect_threshold: document.getElementById("cat_crack_cam1_detect_threshold").value / 100,
+            cam1_trigger_threshold: document.getElementById("cat_crack_cam1_trigger_threshold").value / 100
         },
         warping: {
             enabled: document.getElementById("cat_warping_enabled").checked,
             trigger: document.getElementById("cat_warping_trigger").checked,
-            detect_threshold: document.getElementById("cat_warping_detect_threshold").value / 100,
-            trigger_threshold: document.getElementById("cat_warping_trigger_threshold").value / 100
+            detect_threshold: document.getElementById("cat_warping_cam0_detect_threshold").value / 100,
+            trigger_threshold: document.getElementById("cat_warping_cam0_trigger_threshold").value / 100,
+            cam0_detect_threshold: document.getElementById("cat_warping_cam0_detect_threshold").value / 100,
+            cam0_trigger_threshold: document.getElementById("cat_warping_cam0_trigger_threshold").value / 100,
+            cam1_detect_threshold: document.getElementById("cat_warping_cam1_detect_threshold").value / 100,
+            cam1_trigger_threshold: document.getElementById("cat_warping_cam1_trigger_threshold").value / 100
         }
     };
 
@@ -2252,6 +2321,18 @@ setInterval(async () => {
     } catch (err) {}
 }, 1500);
 
+
+/********************************************************************
+ * Camera count change handler
+ ********************************************************************/
+const camCountEl = document.getElementById("camera_count");
+if (camCountEl) {
+    camCountEl.addEventListener("change", () => {
+        const count = parseInt(camCountEl.value);
+        updateCam2SettingsVisibility(count);
+        updateThresholdVisibility(count);
+    });
+}
 
 /********************************************************************
  * Load settings at startup

@@ -1316,6 +1316,30 @@ dialog#settings-modal {
     color: var(--text-main);
     box-sizing: border-box;
 }
+
+.threshold-section {
+    margin-top: 8px;
+}
+
+.camera-threshold-group {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+}
+
+.camera-threshold-group h6 {
+    margin: 0 0 8px 0;
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.camera-threshold-group:last-child {
+    margin-bottom: 0;
+}
+
 .ai-cat-btn-container {
     display: flex;
     justify-content: center;

@@ -122,30 +122,48 @@ default_config = {
     "masks": {"0": [], "1": []},
 
     # Per-category AI settings (spaghetti, stringing, zits)
+    # NOTE: detect_threshold / trigger_threshold are kept for backward compatibility only.
+    #       cam0_* / cam1_* should be used for all new configs. (Deprecated fields below)
     "ai_categories": {
         "spaghetti": {
             "enabled": True,
             "trigger": True,
-            "detect_threshold": 0.30,
-            "trigger_threshold": 0.70
+            "detect_threshold": 0.30,  # Deprecated fallback (use cam0_/cam1_*)
+            "trigger_threshold": 0.70, # Deprecated fallback (use cam0_/cam1_*)
+            "cam0_detect_threshold": 0.30,
+            "cam0_trigger_threshold": 0.70,
+            "cam1_detect_threshold": 0.30,
+            "cam1_trigger_threshold": 0.70
         },
         "blob": {
             "enabled": True,
             "trigger": False,
-            "detect_threshold": 0.30,
-            "trigger_threshold": 0.70
+            "detect_threshold": 0.30,  # Deprecated fallback (use cam0_/cam1_*)
+            "trigger_threshold": 0.70, # Deprecated fallback (use cam0_/cam1_*)
+            "cam0_detect_threshold": 0.30,
+            "cam0_trigger_threshold": 0.70,
+            "cam1_detect_threshold": 0.30,
+            "cam1_trigger_threshold": 0.70
         },
         "warping": {
             "enabled": True,
             "trigger": False,
-            "detect_threshold": 0.30,
-            "trigger_threshold": 0.70
+            "detect_threshold": 0.30,  # Deprecated fallback (use cam0_/cam1_*)
+            "trigger_threshold": 0.70, # Deprecated fallback (use cam0_/cam1_*)
+            "cam0_detect_threshold": 0.30,
+            "cam0_trigger_threshold": 0.70,
+            "cam1_detect_threshold": 0.30,
+            "cam1_trigger_threshold": 0.70
         },
         "crack": {
             "enabled": True,
             "trigger": False,
-            "detect_threshold": 0.30,
-            "trigger_threshold": 0.70
+            "detect_threshold": 0.30,  # Deprecated fallback (use cam0_/cam1_*)
+            "trigger_threshold": 0.70, # Deprecated fallback (use cam0_/cam1_*)
+            "cam0_detect_threshold": 0.30,
+            "cam0_trigger_threshold": 0.70,
+            "cam1_detect_threshold": 0.30,
+            "cam1_trigger_threshold": 0.70
         },
     },
 }
@@ -394,7 +412,7 @@ def post_process_yolo(output_data, img_w, img_h, conf_threshold):
     return results
 
 
-def run_inference(image):
+def run_inference(image, cam_id: int):
     if not ai_ready or interpreter is None:
         return 0.0, []
 
@@ -415,11 +433,14 @@ def run_inference(image):
         out = interpreter.get_tensor(output_details[0]["index"])
 
         cats = config.get("ai_categories", {})
-        detect_thresholds = [
-            c.get("detect_threshold", 0.3)
-            for c in cats.values()
-            if c.get("enabled", True)
-        ]
+        detect_thresholds = []
+        for c in cats.values():
+            if not c.get("enabled", True):
+                continue
+
+            cam_key = f"cam{cam_id}_detect_threshold"
+            # Prefer camera-specific threshold; fall back to deprecated global detect_threshold
+            detect_thresholds.append(c.get(cam_key, c.get("detect_threshold", 0.3)))
 
         conf_thresh = min(detect_thresholds) if detect_thresholds else 0.3
         detections = post_process_yolo(out, orig_w, orig_h, conf_thresh)
@@ -813,7 +834,7 @@ def background_monitor():
                         if ENABLE_TIMING_LOGS:
                             t0 = time.perf_counter()
 
-                        score, dets = run_inference(img)
+                        score, dets = run_inference(img, cam_id)
 
                         if ENABLE_TIMING_LOGS:
                             t_infer += time.perf_counter() - t0
@@ -854,8 +875,12 @@ def background_monitor():
                         if not cat_cfg or not cat_cfg.get("enabled", True):
                             continue
 
-                        detect_thresh = float(cat_cfg["detect_threshold"])
-                        trigger_thresh = float(cat_cfg["trigger_threshold"])
+                        # Use camera-specific thresholds; fall back to deprecated global values for compatibility
+                        detect_thresh_key = f"cam{cam_id}_detect_threshold"
+                        trigger_thresh_key = f"cam{cam_id}_trigger_threshold"
+                        
+                        detect_thresh = float(cat_cfg.get(detect_thresh_key, cat_cfg.get("detect_threshold", 0.30)))
+                        trigger_thresh = float(cat_cfg.get(trigger_thresh_key, cat_cfg.get("trigger_threshold", 0.70)))
 
                         if conf < detect_thresh:
                             continue
