@@ -172,3 +172,7 @@ gcode:
         { action_raise_error('Must provide MESSAGE parameter') }
     {% endif %}
 ```
+<br>
+Like this project? Buy me a coffee to support development!
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Z8Z41E5IN7)
